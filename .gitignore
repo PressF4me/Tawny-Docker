@@ -8,3 +8,6 @@
 app/rendezvous/.wrangler/
 
 **/.DS_Store
+
+# Local bug log — not published.
+Bugs/
