@@ -30,19 +30,25 @@ STATE_FILE="$RUN_DIR/setup-state.json"
 echo '[]' >"$STATE_FILE"
 export TAWNY_SETUP_STATE="$STATE_FILE"
 
-step() { # step_name ok(0/1) detail
+step() { # step_name ok(0/1) detail [kind]
 	node -e '
 	  const fs = require("fs");
-	  const [file, name, ok, detail] = process.argv.slice(1);
+	  const [file, name, ok, detail, kind] = process.argv.slice(1);
 	  let arr = [];
 	  try {
 	    arr = JSON.parse(fs.readFileSync(file, "utf8"));
 	    if (!Array.isArray(arr)) arr = [];
 	  } catch {}
-	  arr.push({ step: name, ok: ok === "1", detail, at: new Date().toISOString() });
+	  arr.push({ step: name, ok: ok === "1", detail, kind: kind || "", at: new Date().toISOString() });
 	  fs.writeFileSync(file, JSON.stringify(arr));
-	' "$STATE_FILE" "$1" "$2" "$3" 2>/dev/null || true
+	' "$STATE_FILE" "$1" "$2" "${3:-}" "${4:-}" 2>/dev/null || true
 }
+
+# Strip an auth key out of anything we log or record. `tailscale up`'s own
+# error output, and Node's execFile "Command failed:" message, both echo the
+# full --authkey=… argument; that string is served on /setup over plain HTTP.
+redact_key() { sed -e 's/--authkey=[A-Za-z0-9._~-]*/--authkey=<redacted>/g' \
+                   -e 's/tskey-[A-Za-z0-9._~-]\{6,\}/tskey-<redacted>/g'; }
 
 # server.js used to run a second, self-signed HTTPS listener. It is gone. Pin
 # the variable off so an old value left in a .env or a stale compose file cannot
@@ -247,16 +253,20 @@ tsd_pid=''
 #          merged_routes() above and the `serve` guard below.
 ts_mode=none
 
-# The daemon starts whether or not there is a key, so that an operator who has
-# not got one yet can paste it into /setup and be joined without ever editing a
-# file or restarting anything. A logged-out tailscaled is idle and harmless;
-# `up` is what joins, and that can happen now or in five minutes from a browser.
-if command -v tailscaled >/dev/null 2>&1 &&
-	{ [ -n "$TS_AUTHKEY" ] || [ ! -S "$TS_HOST_SOCKET" ]; }; then
-	ts_sock="$RUN_DIR/tailscaled.sock"
-	ts_mode=own
+# A leftover node key in $TS_STATE_DIR that the coordination server will not
+# take back (the volume outlived a tailnet, the node was deleted, an earlier
+# `up` half-registered) wedges tailscaled in NoState *forever* — every later
+# `up` then hangs with no key ever at fault. This marker, a sibling of the
+# state dir so it survives a restart, stops the self-heal below from archiving
+# the state on every single boot when a genuinely bad key is the problem.
+TS_RESET_MARK="$(dirname "$TS_STATE_DIR")/.tawny-ts-reset"
+# server.js drops the pasted key here to ask the supervisor loop for a reset
+# it cannot do itself (it does not own the tailscaled process).
+TS_RECOVER_REQ="$RUN_DIR/ts-recover.req"
+
+# Start (or restart) our own tailscaled and wait for its socket. Sets tsd_pid.
+ts_launch() {
 	mkdir -p "$TS_STATE_DIR"
-	log "starting our own tailscaled (userspace networking), state in $TS_STATE_DIR"
 	tailscaled \
 		--tun=userspace-networking \
 		--socket="$ts_sock" \
@@ -268,6 +278,98 @@ if command -v tailscaled >/dev/null 2>&1 &&
 	# that reads exactly like a broken mount.
 	i=0
 	while [ ! -S "$ts_sock" ] && [ "$i" -lt 30 ]; do i=$((i + 1)); sleep 1; done
+}
+
+# Why did `up` fail? Read its output *and* the daemon's health.
+#   stale   — a persisted node key control rejects; a fresh one fixes it and
+#             the operator's auth key is fine.
+#   badkey  — the auth key: expired, single-use spent, tags not permitted.
+#   network — could not reach the coordination server at all.
+#   unknown — anything else; do not touch the state dir.
+ts_fail_kind() { # up_log
+	txt="$(cat "$1" 2>/dev/null || true)
+$(tailscale --socket="$ts_sock" status 2>&1 || true)"
+	# `already exists` / `register request` / `last login error` come straight
+	# from a control-plane registration that failed on the persisted node key —
+	# `status` keeps printing the last one, which is why the daemon health is
+	# folded in here. NoState on its own is too noisy (it shows briefly on any
+	# fresh start) so it is deliberately not a signal.
+	case "$txt" in
+		*"already exists"*|*"register request: http 4"*|*"last login error"*|*"wrong nodekey"*|*"duplicate node key"*) echo stale ;;
+		*"invalid key"*|*"bad authkey"*|*"authkey"*|*expired*|*"is not valid"*|*"requires an auth key"*|*unauthorized*|*"not permitted"*) echo badkey ;;
+		*timeout*|*deadline*|*"dial tcp"*|*"no route to host"*|*"lookup "*|*"i/o timeout"*|*"connection refused"*|*"TLS handshake"*) echo network ;;
+		*) echo unknown ;;
+	esac
+}
+
+# Move an unusable identity aside (never delete — keep it for inspection),
+# keep the two most recent archives, and bring tailscaled back clean.
+ts_reset_state() {
+	log "clearing a leftover Tailscale identity in $TS_STATE_DIR"
+	tailscale --socket="$ts_sock" logout >/dev/null 2>&1 || true
+	if [ -n "$tsd_pid" ]; then
+		kill "$tsd_pid" 2>/dev/null || true
+		i=0; while kill -0 "$tsd_pid" 2>/dev/null && [ "$i" -lt 10 ]; do i=$((i + 1)); sleep 1; done
+	fi
+	broken="$TS_STATE_DIR.broken-$(date -u +%Y%m%dT%H%M%SZ)"
+	mv "$TS_STATE_DIR" "$broken" 2>/dev/null && printf '%s\n' "$broken" >"$RUN_DIR/ts-archived" || rm -rf "$TS_STATE_DIR"
+	ls -1dt "$TS_STATE_DIR".broken-* 2>/dev/null | tail -n +3 | while read -r d; do rm -rf "$d"; done
+	ts_launch
+}
+
+# Join the tailnet with $1. --timeout so a control-plane stall returns a real,
+# classifiable error instead of blocking; on a stale identity, archive it and
+# retry once — the "replace an old session on the spot" the operator should
+# never have to do by hand. Records tailscale_up with a kind for /setup.
+ts_join() { # authkey
+	# `if cmd; then` (not `cmd; [ $? ]`) so `set -e` does not abort on the
+	# expected failure path.
+	if tailscale --socket="$ts_sock" up \
+		--authkey="$1" --hostname="$TS_HOSTNAME" \
+		--accept-dns=false --accept-routes=false --timeout=60s \
+		>"$RUN_DIR/ts-up.log" 2>&1; then
+		rm -f "$TS_RESET_MARK"
+		log "joined the tailnet as $TS_HOSTNAME"
+		step tailscale_up 1 "joined the tailnet as $TS_HOSTNAME"
+		advertise_route "$ts_sock"
+		return 0
+	fi
+
+	kind="$(ts_fail_kind "$RUN_DIR/ts-up.log")"
+	if [ "$kind" = stale ] && [ ! -f "$TS_RESET_MARK" ]; then
+		log "tailscale up failed on a leftover identity — clearing it and retrying" >&2
+		ts_reset_state
+		: >"$TS_RESET_MARK"
+		if tailscale --socket="$ts_sock" up \
+			--authkey="$1" --hostname="$TS_HOSTNAME" \
+			--accept-dns=false --accept-routes=false --timeout=60s \
+			>"$RUN_DIR/ts-up.log" 2>&1; then
+			log "joined as $TS_HOSTNAME after clearing a leftover identity"
+			step tailscale_up 1 "joined after clearing a leftover Tailscale identity; the old state was archived to $(cat "$RUN_DIR/ts-archived" 2>/dev/null || true)"
+			advertise_route "$ts_sock"
+			return 0
+		fi
+		kind="$(ts_fail_kind "$RUN_DIR/ts-up.log")"
+		if [ "$kind" = stale ]; then kind=stale_unrecovered; fi
+	fi
+
+	detail="$(tail -n 20 "$RUN_DIR/ts-up.log" 2>/dev/null | redact_key)"
+	log "tailscale up FAILED ($kind) — remote viewing will not work:" >&2
+	printf '%s\n' "$detail" | sed 's/^/tawny:   /' >&2
+	step tailscale_up 0 "$detail" "$kind"
+	return 1
+}
+
+# The daemon starts whether or not there is a key, so that an operator who has
+# not got one yet can paste it into /setup and be joined without ever editing a
+# file or restarting anything. A logged-out tailscaled is idle and harmless;
+# `up` is what joins, and that can happen now or in five minutes from a browser.
+if command -v tailscaled >/dev/null 2>&1 &&
+	{ [ -n "$TS_AUTHKEY" ] || [ ! -S "$TS_HOST_SOCKET" ]; }; then
+	ts_sock="$RUN_DIR/tailscaled.sock"
+	ts_mode=own
+	log "starting our own tailscaled (userspace networking), state in $TS_STATE_DIR"
+	ts_launch
 
 	if [ -n "$TS_AUTHKEY" ]; then
 		# --advertise-routes is deliberately not passed to `up`. A household
@@ -275,22 +377,8 @@ if command -v tailscaled >/dev/null 2>&1 &&
 		# previous Tawny box — very often already has a subnet router for this
 		# same /24, and joining first is what lets us ask "does anyone already
 		# carry this route" *before* announcing it too. See advertise_route()
-		# below and docker/route-conflict.js.
-		if tailscale --socket="$ts_sock" up \
-			--authkey="$TS_AUTHKEY" --hostname="$TS_HOSTNAME" \
-			--accept-dns=false --accept-routes=false \
-			>"$RUN_DIR/ts-up.log" 2>&1; then
-			log "joined the tailnet as $TS_HOSTNAME"
-			step tailscale_up 1 "joined the tailnet as $TS_HOSTNAME"
-			advertise_route "$ts_sock"
-		else
-			# The socket deliberately stays exported: the daemon is up, so
-			# /setup can show what went wrong and take a corrected key without
-			# the operator having to restart the container.
-			log "tailscale up FAILED — remote viewing will not work:" >&2
-			sed 's/^/tawny:   /' "$RUN_DIR/ts-up.log" >&2 || true
-			step tailscale_up 0 "$(tail -n 20 "$RUN_DIR/ts-up.log" 2>/dev/null || true)"
-		fi
+		# and docker/route-conflict.js.
+		ts_join "$TS_AUTHKEY" || true
 	else
 		log "no auth key yet — paste one at http://${LAN_IP:-<this box>}:$PORT/setup"
 	fi
@@ -517,6 +605,19 @@ trap term TERM INT
 # busybox ash has no reliable `wait -n`, so poll. One second of latency on a
 # crash is irrelevant next to portability across the shells this image may use.
 while :; do
+	# /setup cannot restart tailscaled itself (server.js does not own the
+	# process), so it leaves the pasted key here to ask for the same
+	# archive-and-rejoin ts_join() does at boot. Handled before the
+	# tailscaled-exited check because ts_reset_state() kills the daemon.
+	if [ "$ts_mode" = own ] && [ -f "$TS_RECOVER_REQ" ]; then
+		rk="$(cat "$TS_RECOVER_REQ" 2>/dev/null || true)"
+		rm -f "$TS_RECOVER_REQ"
+		echo "tawny: /setup asked to clear a leftover Tailscale identity" >&2
+		ts_reset_state
+		: >"$TS_RESET_MARK"   # this was the deliberate reset; ts_join reports if it still fails
+		[ -n "$rk" ] && ts_join "$rk" || true
+		continue
+	fi
 	if ! kill -0 "$node_pid" 2>/dev/null; then
 		wait "$node_pid" 2>/dev/null; status=$?; break
 	fi

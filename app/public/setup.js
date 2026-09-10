@@ -335,7 +335,7 @@ function stepMachine(data) {
 // or the button and its message vanish mid-request.
 let joinBusy = false;
 
-function joinForm() {
+function joinForm(opts = {}) {
   const input = el('input', {
     id: 'join-key', class: 'join-input', type: 'text',
     placeholder: 'tskey-auth-…',
@@ -344,23 +344,27 @@ function joinForm() {
   const btn = el('button', { id: 'join-go', class: 'wide primary', type: 'submit' }, 'Connect');
   const msg = el('p', { id: 'join-msg', class: 'join-msg', hidden: 'hidden' });
 
+  // On the "stale_unrecovered" card the same field feeds a second action:
+  // archive the stuck identity and rejoin with this key.
+  const resetBtn = opts.resetLabel
+    ? el('button', { id: 'join-reset', class: 'wide', type: 'button' }, opts.resetLabel)
+    : null;
+
   const form = el('form', { id: 'join-form', class: 'join' },
     el('label', { class: 'join-label', for: 'join-key' }, 'Paste your auth key'),
-    input, btn, msg);
+    input, btn, resetBtn, msg);
 
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
+  const post = async (path, label) => {
     const key = input.value.trim();
     if (!key) return;
-
     joinBusy = true;
     btn.disabled = true;
+    if (resetBtn) resetBtn.disabled = true;
     btn.textContent = 'Connecting…';
     msg.hidden = true;
     msg.className = 'join-msg';
-
     try {
-      const res = await fetch('/setup/join', {
+      const res = await fetch(path, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ authkey: key })
@@ -372,12 +376,20 @@ function joinForm() {
         msg.hidden = false;
         input.value = '';
         joinBusy = false;
-        // The step is finished, so stop pinning it — let the flow move on.
+        selected = null;   // finished — let the flow move on
+        return tick();
+      }
+      if (out.recovering) {
+        msg.className = 'join-msg';
+        msg.textContent = 'Clearing a leftover Tailscale identity and rejoining — this can take a few seconds…';
+        msg.hidden = false;
+        input.value = '';
+        joinBusy = false;
         selected = null;
         return tick();
       }
       msg.className = 'join-msg is-bad';
-      msg.textContent = out.error || `Could not join (${res.status}).`;
+      msg.textContent = out.error || `${label} failed (${res.status}).`;
       msg.hidden = false;
     } catch {
       msg.className = 'join-msg is-bad';
@@ -385,9 +397,13 @@ function joinForm() {
       msg.hidden = false;
     }
     btn.disabled = false;
+    if (resetBtn) resetBtn.disabled = false;
     btn.textContent = 'Connect';
     joinBusy = false;
-  });
+  };
+
+  form.addEventListener('submit', (e) => { e.preventDefault(); post('/setup/join', 'Join'); });
+  if (resetBtn) resetBtn.addEventListener('click', () => post('/setup/ts-reset', 'Reset'));
 
   return form;
 }
@@ -509,7 +525,63 @@ function stepConnect(data) {
   // A daemon is running inside the container, logged out. This is the only
   // situation where an auth key is worth asking anyone for.
   if (tailscale.configured && tailscale.reachable) {
-    const retry = up && up.ok === false;
+    const failed = up && up.ok === false;
+    const kind = (up && up.kind) || '';
+
+    // A leftover identity is being archived and rejoined automatically. Nothing
+    // for the operator to do but wait for the next poll.
+    if (failed && kind === 'stale') {
+      return {
+        state: 'now',
+        title: 'Connect to Tailscale',
+        tag: 'clearing a leftover identity',
+        body: [
+          el('p', { class: 'step-say' }, 'A Tailscale identity from an earlier run was stuck in this container’s data volume. Tawny is clearing it and rejoining — this page updates on its own in a few seconds.'),
+          up.detail ? el('pre', { class: 'step-log' }, up.detail) : null,
+          explain
+        ]
+      };
+    }
+
+    // The automatic clear could not run or did not take. Hand the operator the
+    // manual step, and a one-click retry.
+    if (failed && kind === 'stale_unrecovered') {
+      return {
+        state: 'bad',
+        title: 'Connect to Tailscale',
+        tag: 'leftover identity — needs a hand',
+        body: [
+          el('p', { class: 'step-say' }, 'An earlier run left a Tailscale identity in this container’s data volume that the coordination server will not take back, and Tawny could not clear it automatically.'),
+          el('div', { class: 'step-do' }, 'Do one of:',
+            el('ol', {},
+              el('li', {}, 'Paste the key below and press Reset Tailscale identity.'),
+              el('li', {}, 'Or run  docker exec <container> rm -rf /data/tailscale  and restart the container.'),
+              el('li', {}, 'Or delete and recreate the tawny-data volume.'))),
+          el('p', { class: 'step-say' }, 'The unusable state was moved to /data/tailscale.broken-… inside the volume — nothing was deleted.'),
+          up.detail ? el('pre', { class: 'step-log' }, up.detail) : null,
+          joinForm({ resetLabel: 'Reset Tailscale identity' }),
+          explain
+        ]
+      };
+    }
+
+    if (failed && kind === 'network') {
+      return {
+        state: 'bad',
+        title: 'Connect to Tailscale',
+        tag: 'could not reach Tailscale',
+        body: [
+          el('p', { class: 'step-say' }, 'Tawny got as far as contacting Tailscale, but the connection timed out. This is almost always the host’s firewall or DNS — not the key.'),
+          el('div', { class: 'step-do' }, 'Check that this machine can reach controlplane.tailscale.com and login.tailscale.com on port 443. A VPN kill-switch (Mullvad) or an nftables / ufw drop is the usual cause. Then paste the key again.'),
+          up.detail ? el('pre', { class: 'step-log' }, up.detail) : null,
+          joinForm(),
+          explain
+        ]
+      };
+    }
+
+    // badkey, unknown, or a step from before this field existed.
+    const retry = failed;
     return {
       state: retry ? 'bad' : 'now',
       title: 'Connect to Tailscale',

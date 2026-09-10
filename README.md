@@ -112,7 +112,8 @@ next step.
 | Symptom | Cause / fix |
 |---|---|
 | Container never came up, `/healthz` dead | `docker logs tawny`; `docker ps -a` if no output at all. |
-| `/setup`: `tailscale up FAILED` | Auth key expired, already used (not Reusable), or wrong tailnet. Fresh key in `.env`, `docker compose restart`. |
+| `/setup`: `tailscale up FAILED` / key rejected | Auth key expired, already used (not Reusable), or wrong tailnet. Fresh key in `.env`, `docker compose restart`. |
+| `/setup`: "leftover identity — needs a hand" (or a join that hangs then fails despite a good key) | A Tailscale identity from an earlier run is stuck in `tawny-data` and the coordination server won't take it back. Tawny normally clears it automatically; if it can't, press **Reset Tailscale identity** on `/setup`, or `docker exec <container> rm -rf /data/tailscale` and restart. The old state is kept at `/data/tailscale.broken-…`. |
 | `https://tawny.<tailnet>.ts.net` won't open, or `/setup`: `serve FAILED` re HTTPS/MagicDNS | Step 2 skipped. Enable MagicDNS then HTTPS Certificates, `docker compose restart`. |
 | Address opens on the box but not on your laptop/phone | That device also needs Tailscale up with MagicDNS on. On the box's LAN, `http://<box>:8099` works (no talk-back). |
 | Viewer loads, "Join" hangs, no video | Subnet route not approved yet (`/setup` confirms). If approved, check the Viewer has `--accept-routes`. |

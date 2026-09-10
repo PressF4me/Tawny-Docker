@@ -9,7 +9,7 @@ import net from 'node:net';
 import { readFile } from 'node:fs/promises';
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { execFile } from 'node:child_process';
-import { join, extname, normalize, sep } from 'node:path';
+import { join, extname, normalize, sep, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID, createHash, createHmac } from 'node:crypto';
 import { WebSocketServer } from 'ws';
@@ -101,6 +101,11 @@ const TAWNY_TS_ROUTES = process.env.TAWNY_TS_ROUTES || '';
 const TAWNY_TS_MODE = process.env.TAWNY_TS_MODE ||
   (TAWNY_TS_SOCKET ? (TAWNY_TS_SOCKET === TS_HOST_SOCKET ? 'host' : 'own') : 'none');
 const TAWNY_SETUP_STATE = process.env.TAWNY_SETUP_STATE || '';
+// Runtime scratch dir (docker/entrypoint.sh's RUN_DIR). A stale-identity join
+// failure is queued here for the supervisor loop to clear — this process
+// cannot restart tailscaled itself. See joinTailnet() and entrypoint.sh.
+const RUN_DIR = TAWNY_SETUP_STATE ? dirname(TAWNY_SETUP_STATE) : '/tmp/tawny';
+const TS_RECOVER_REQ = join(RUN_DIR, 'ts-recover.req');
 // Where the operator's answer to "do you want to watch from outside the
 // house?" is kept. TS_ROUTES now defaults to `off`, so without this the
 // feature would be a setting nobody finds; with it, /setup can turn routing on
@@ -369,18 +374,49 @@ function noteFail(ip) {
 // is wrapped so a missing `tailscale` binary or an unconfigured socket
 // degrades to "not on a tailnet" — this must never 500 and never throw.
 
-/** Runs a command, never throwing and never rejecting. */
+/**
+ * Strip a Tailscale auth key from a string. `tailscale up`'s own error output
+ * and Node's execFile "Command failed: <argv>" message both echo the full
+ * --authkey=… — and that text is served on /setup over plain HTTP.
+ */
+function redactKey(s) {
+  return String(s == null ? '' : s)
+    .replace(/--authkey=\S+/g, '--authkey=<redacted>')
+    .replace(/tskey-[A-Za-z0-9._~-]{6,}/g, 'tskey-<redacted>');
+}
+
+/**
+ * Why did `tailscale up` fail? Classified from its output plus `status`.
+ *   stale   — a persisted node key control will not take back (volume outlived
+ *             a tailnet, node deleted, a half-registration). A fresh node key
+ *             fixes it; the operator's auth key is fine.
+ *   badkey  — the auth key: expired, single-use spent, tags not permitted.
+ *   network — never reached the coordination server.
+ *   unknown — anything else.
+ */
+function classifyUp(text) {
+  const t = String(text || '').toLowerCase();
+  // NoState alone is too noisy (brief on any fresh start). These are the
+  // signals of a persisted node key control refuses; `status` keeps echoing
+  // the last one, so callers fold `status` output into `text`.
+  if (/already exists|register request: http 4|last login error|wrong nodekey|duplicate node key/.test(t)) return 'stale';
+  if (/invalid key|bad authkey|authkey|expired|is not valid|requires an auth key|unauthorized|not permitted/.test(t)) return 'badkey';
+  if (/timeout|deadline|dial tcp|no route to host|lookup |i\/o timeout|connection refused|tls handshake/.test(t)) return 'network';
+  return 'unknown';
+}
+
+/** Runs a command, never throwing and never rejecting. Auth keys are redacted. */
 function run(cmd, args, timeoutMs = 2500) {
   return new Promise((resolve) => {
     try {
       execFile(cmd, args, { timeout: timeoutMs, windowsHide: true }, (err, stdout, stderr) => {
         // `tailscale up` says why it refused a key on stderr, so a caller that
         // wants to show the operator the real reason needs it kept.
-        if (err) return resolve({ ok: false, stdout: '', stderr: stderr || '', error: err.message });
-        resolve({ ok: true, stdout: stdout || '', stderr: stderr || '', error: null });
+        if (err) return resolve({ ok: false, stdout: '', stderr: redactKey(stderr || ''), error: redactKey(err.message) });
+        resolve({ ok: true, stdout: stdout || '', stderr: redactKey(stderr || ''), error: null });
       });
     } catch (e) {
-      resolve({ ok: false, stdout: '', stderr: '', error: String(e && e.message || e) });
+      resolve({ ok: false, stdout: '', stderr: '', error: redactKey(String(e && e.message || e)) });
     }
   });
 }
@@ -638,7 +674,7 @@ function readJsonBody(req, limit = 8192) {
 }
 
 /** Append to the same file docker/entrypoint.sh writes, in the same shape. */
-function recordStep(step, ok, detail) {
+function recordStep(step, ok, detail, kind = '') {
   if (!TAWNY_SETUP_STATE) return;
   try {
     let arr = [];
@@ -646,7 +682,7 @@ function recordStep(step, ok, detail) {
       const parsed = JSON.parse(readFileSync(TAWNY_SETUP_STATE, 'utf8'));
       if (Array.isArray(parsed)) arr = parsed;
     } catch { /* first write, or a truncated file — start clean */ }
-    arr.push({ step, ok, detail, at: new Date().toISOString() });
+    arr.push({ step, ok, detail, kind, at: new Date().toISOString() });
     writeFileSync(TAWNY_SETUP_STATE, JSON.stringify(arr));
   } catch { /* state file is a convenience; never fail a request over it */ }
 }
@@ -661,18 +697,40 @@ async function joinTailnet(key) {
     `--socket=${TAWNY_TS_SOCKET}`, 'up',
     `--authkey=${key}`,
     `--hostname=${process.env.TAWNY_TS_HOSTNAME || 'tawny'}`,
-    '--accept-dns=false', '--accept-routes=false'
+    // --timeout so a control-plane stall returns a classifiable error instead
+    // of blocking until our execFile SIGTERM (whose message leaks the argv).
+    '--accept-dns=false', '--accept-routes=false', '--timeout=60s'
   ];
   // --advertise-routes is not passed here — see advertiseRoute() below. Joining
   // first is what lets us check for a conflicting subnet router before
   // announcing anything, exactly as docker/entrypoint.sh now does at boot.
 
-  // Long timeout: this contacts Tailscale's control plane over the internet.
   const up = await run('tailscale', args, 90000);
   if (!up.ok) {
     const detail = (up.stderr || up.error || '').trim().slice(0, 2000);
-    recordStep('tailscale_up', false, detail);
-    return { ok: false, error: detail || 'tailscale up failed' };
+    const health = await run('tailscale', [`--socket=${TAWNY_TS_SOCKET}`, 'status'], 4000);
+    const kind = classifyUp(`${detail}\n${health.stdout || ''}${health.stderr || ''}`);
+
+    // A leftover node key control won't take back: no key the operator pastes
+    // will ever fix this. Queue the archive-and-rejoin for the supervisor loop
+    // (this process can't restart tailscaled) and tell the page to keep
+    // polling rather than blaming the key.
+    if (kind === 'stale') {
+      try {
+        writeFileSync(TS_RECOVER_REQ, key, { mode: 0o600 });
+        recordStep('tailscale_up', false,
+          'A Tailscale identity from an earlier run is stuck in the data volume. Tawny is clearing it and will rejoin — this can take a few seconds.',
+          'stale');
+        return {
+          ok: false, kind: 'stale', recovering: true,
+          error: 'A leftover Tailscale identity is being cleared. This page will retry on its own.'
+        };
+      } catch { /* couldn't queue it — fall through to the manual warning */ }
+    }
+
+    const outKind = kind === 'stale' ? 'stale_unrecovered' : kind;
+    recordStep('tailscale_up', false, detail || 'tailscale up failed', outKind);
+    return { ok: false, kind: outKind, error: detail || 'tailscale up failed' };
   }
   recordStep('tailscale_up', true, 'joined the tailnet from the setup page');
 
@@ -833,7 +891,7 @@ const handler = async (req, res) => {
   // itself (own network only) so the setup page can act without a file edit
   // and a restart.
   const setupPost = req.method === 'POST' && req.url &&
-    ['/setup/join', '/setup/skip', '/setup/route/advertise', '/setup/route/withdraw']
+    ['/setup/join', '/setup/skip', '/setup/ts-reset', '/setup/route/advertise', '/setup/route/withdraw']
       .includes(req.url.split('?')[0]);
   if (req.method !== 'GET' && req.method !== 'HEAD' && !setupPost) {
     res.writeHead(405, secureHeaders({ allow: 'GET, HEAD' }));
@@ -926,7 +984,35 @@ const handler = async (req, res) => {
     }
     const result = await joinTailnet(key);
     setupCache = { at: 0, value: null };
-    return json(res, result.ok ? 200 : 502, result);
+    return json(res, result.ok ? 200 : (result.recovering ? 202 : 502), result);
+  }
+  // Manual "Reset Tailscale identity" — for when the automatic clear at boot or
+  // after a paste could not run, or the operator wants to force it. Archives
+  // the stuck state dir and rejoins with the key (from the body, or the one
+  // joinTailnet() already queued). The supervisor loop does the actual work
+  // because it owns the tailscaled process.
+  if (url.pathname === '/setup/ts-reset') {
+    if (req.method !== 'POST') return json(res, 405, { error: 'POST only' });
+    if (!fromLocalNetwork(req)) {
+      return json(res, 403, { error: 'Setup can only be completed from your own network.' });
+    }
+    if (!TAWNY_TS_SOCKET || TAWNY_TS_MODE === 'host') {
+      return json(res, 409, { error: 'Only applies to a container running its own tailscaled.' });
+    }
+    const body = await readJsonBody(req);
+    let key = String((body && body.authkey) || '').trim();
+    if (!key) { try { key = readFileSync(TS_RECOVER_REQ, 'utf8').trim(); } catch { /* none queued */ } }
+    if (!AUTHKEY_RE.test(key)) {
+      return json(res, 400, { error: 'Paste the auth key again so Tawny can rejoin after the reset.' });
+    }
+    try {
+      writeFileSync(TS_RECOVER_REQ, key, { mode: 0o600 });
+      recordStep('tailscale_up', false, 'Resetting the Tailscale identity and rejoining…', 'stale');
+      setupCache = { at: 0, value: null };
+      return json(res, 202, { ok: false, recovering: true });
+    } catch (e) {
+      return json(res, 500, { error: 'Could not queue the reset: ' + String(e && e.message || e) });
+    }
   }
   // The operator's answer to a detected route conflict, once they have read
   // the warning: try anyway (they know the other router is retired, or they
