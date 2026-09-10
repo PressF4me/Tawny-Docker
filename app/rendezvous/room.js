@@ -213,7 +213,25 @@ export class Room {
       // by whoever spoke first.
       let rekey = null;
       if (meta.role === 'viewer') {
-        if (!rec || (await sha256Hex(msg.t)) !== rec.hashT) {
+        // Two very different things used to share one close code, one sentence
+        // and one failure counter.
+        //
+        // `!rec` is "no Monitor has ever registered this room". Nothing is
+        // wrong with the code in this Viewer's hand — the other end is simply
+        // not running. Reporting that as "pairing expired" sent people back to
+        // rescan the same QR for ever; 4010 says the true thing, and
+        // public/app.js already has its own sentence for it. The code and the
+        // reason string match server.js's split exactly, so the two relays
+        // cannot drift into telling the same person different stories.
+        //
+        // It also must not count as a failed admission. noteFailure() feeds
+        // the room's lockout, so someone patiently rescanning an offline
+        // Monitor's QR was walking their own channel into 4029 "too many
+        // attempts" — locked out of their own room for doing nothing wrong.
+        // Nobody being home is not an attack on the door.
+        if (!rec) { ws.close(4010, 'monitor offline'); return; }
+        // A ticket that genuinely does not match this room still counts.
+        if ((await sha256Hex(msg.t)) !== rec.hashT) {
           await this.noteFailure();
           ws.close(4008, 'pairing expired'); return;
         }
