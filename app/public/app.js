@@ -732,8 +732,7 @@ function watcherChannel() {
   return ch;
 }
 
-function openWatchPair() {
-  S.channel = watcherChannel();
+function refreshWatchPair() {
   const url = pairLink();
   el.wpUrl.textContent = url;
   try {
@@ -749,8 +748,36 @@ function openWatchPair() {
       'browser will refuse it the microphone. Serve Tawny over https.');
   }
   fillRelayHint(el.wpRelay, el.wpRelayAddr);
+}
+
+// "Waiting for the Viewer" is a screen meant to be left sitting there, which is
+// exactly why it may not show a code that stopped working while nobody was
+// looking. It drew its QR once and never again: ten minutes later the code on
+// screen had lapsed, and pairingAllowed() on this same page refused the scan
+// as expired — the Monitor rejecting a code it was still displaying. The
+// pairing sheet already rotates (tickPairSheet); this is the same duty for the
+// first-run screen, which is the one most likely to be left alone for an hour.
+let wpTicker = null;
+function tickWatchPair() {
+  // The screen went away (Set up later, back, or the session started elsewhere)
+  // — stop rather than redraw something nobody is looking at.
+  if (!el.watchPair || el.watchPair.hidden) { clearInterval(wpTicker); wpTicker = null; return; }
+  // The shell rotates its own code and tells us about it; never mint over it.
+  if (S.nativeShell) return;
+  if (pairCodeLeft() > 0) return;
+  newPairCode();
+  refreshWatchPair();
+}
+
+function openWatchPair() {
+  S.channel = watcherChannel();
+  // Same rule as openPair(): never open on a code that has already lapsed.
+  if (pairCodeLeft() <= 0 && !S.nativeShell) newPairCode();
+  refreshWatchPair();
   el.wpStatus.textContent = 'Waiting for the Viewer';
   show(el.watchPair);
+  clearInterval(wpTicker);
+  wpTicker = setInterval(tickWatchPair, 1000);
 }
 
 $('#welcome-go').addEventListener('click', () => { note(el.setupNote, ''); show(el.setupRole); });
@@ -945,7 +972,18 @@ function pairingAllowed(m) {
 
 function pairLink() {
   const base = chosenBase();
-  const code = S.pairCode || newPairCode();
+  // Expired counts as absent. `S.pairCode || newPairCode()` re-minted only when
+  // there was no code at all, so a link built after the ten minutes had run out
+  // carried the lapsed `c` and `e` — and pairingAllowed() on this very page
+  // then refused that code as expired. The Viewer was told "that pairing code
+  // has expired" about a code this page had just handed it.
+  //
+  // Except inside the native shell, where the shell draws the QR and owns the
+  // code, pushing each rotation in through window.tawnyPairCode(). Minting one
+  // here would leave pairingAllowed() judging phones against a code no QR has
+  // ever displayed — breaking the app-as-Monitor direction, which works.
+  const code = (pairCodeLeft() > 0 || (S.nativeShell && S.pairCode))
+    ? S.pairCode : newPairCode();
   // The setup flow shows this link *before* start() runs, so the ticket has to
   // exist by the time the QR is drawn or the link would hand out a `t` the
   // Monitor then replaced. Only the browser mints one: inside the native shell

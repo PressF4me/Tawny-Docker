@@ -356,7 +356,11 @@ function originAllowed(req) {
   let parsed;
   try { parsed = new URL(origin); } catch { return false; }
   const oh = parsed.hostname.toLowerCase();
-  if (oh === '127.0.0.1' || oh === '::1' || oh === 'localhost') return true;
+  // `[::1]` with the brackets: URL.hostname keeps them on an IPv6 literal, so a
+  // bare '::1' here matched nothing and an IPv6-loopback WebView was still
+  // refused. The whole 127/8 block counts too — a WebView is not obliged to
+  // pick .0.1.
+  if (oh === 'localhost' || oh === '[::1]' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(oh)) return true;
   const host = String(req.headers.host || '').toLowerCase();
   if (parsed.host.toLowerCase() === host) return true;
   return ALLOWED_HOSTS.includes(oh) || ALLOWED_HOSTS.includes(parsed.host.toLowerCase());
