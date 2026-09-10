@@ -44,11 +44,21 @@ function goLink(href, label) {
   return a;
 }
 
-/** A collapsible plain-language explainer. */
+// render() rebuilds every step row on each 4 s poll, which used to snap any
+// open explainer shut — it looked like it "closed itself after a few seconds".
+// Remember which are open (keyed by their question) and restore on rebuild.
+const whyOpen = new Set();
+
+/** A collapsible plain-language explainer that survives a re-render. */
 function why(question, ...paragraphs) {
-  return el('details', { class: 'why' },
+  const key = question.slice(0, 60);
+  const d = el('details', whyOpen.has(key) ? { class: 'why', open: 'open' } : { class: 'why' },
     el('summary', {}, question),
     ...paragraphs.map((p) => el('p', {}, p)));
+  d.addEventListener('toggle', () => {
+    if (d.open) whyOpen.add(key); else whyOpen.delete(key);
+  });
+  return d;
 }
 
 function copyRow(text) {
@@ -96,6 +106,16 @@ let openNow = 0;
 // The last payload rendered, so a navigation press can repaint immediately
 // instead of waiting out the four-second poll.
 let lastData = null;
+
+// Set by renderVerdict on every paint: is the whole setup finished, and what is
+// the https://<node>.<tailnet>.ts.net address to hand off to. The back arrow
+// reads these — once everything is done it stops stepping through the flow and
+// opens Tawny for real instead.
+let setupComplete = false;
+let finishUrl = '';
+// Flipped when the operator actually clicks "Open Tawny" on the finish screen,
+// so the page can switch to a plain "you're done, close this tab" panel.
+let openedApp = false;
 
 function repaint() {
   if (lastData) render(lastData);
@@ -166,6 +186,13 @@ document.addEventListener('click', (e) => {
 // arrow means up one level; leaving is a different intent and now has its own
 // labelled link in the footer.
 document.getElementById('setup-back').addEventListener('click', () => {
+  // Once the whole setup is finished, Back is not "previous step" any more —
+  // there is nothing left to go back to and the operator is done here. Hand
+  // them off to the real address instead.
+  if (setupComplete && finishUrl) {
+    location.href = finishUrl;
+    return;
+  }
   selected = Math.max(0, openNow - 1);
   repaint();
 });
@@ -204,11 +231,20 @@ document.getElementById('skip-link').addEventListener('click', async (e) => {
 
 /** The address, as something you can actually click. */
 function openLink(url) {
+  const a = el('a', { class: 'open-app', href: url, target: '_blank', rel: 'noopener noreferrer' },
+    el('span', { class: 'open-app-label' }, 'Open Tawny'),
+    el('span', { class: 'open-app-url' }, url),
+    svg(ICONS.out, 'open-app-out'));
+  // The click opens the app in a new tab; here it also flips the finish screen
+  // into "you're done" mode — a fresh burst of confetti and a close prompt.
+  a.addEventListener('click', () => {
+    if (openedApp) return;
+    openedApp = true;
+    confetti({ big: true });
+    setTimeout(repaint, 0);
+  });
   return el('div', { class: 'url-hero' },
-    el('a', { class: 'open-app', href: url, target: '_blank', rel: 'noopener noreferrer' },
-      el('span', { class: 'open-app-label' }, 'Open Tawny'),
-      el('span', { class: 'open-app-url' }, url),
-      svg(ICONS.out, 'open-app-out')),
+    a,
     el('button', { class: 'copy-btn', type: 'button', 'data-copy-text': url }, 'Copy'));
 }
 
@@ -218,7 +254,8 @@ function openLink(url) {
 let celebrated = false;
 let sawIncomplete = false;
 
-function confetti() {
+function confetti(opts = {}) {
+  const big = !!opts.big;
   // A full-screen animation is precisely what this setting is for.
   try {
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -246,21 +283,22 @@ function confetti() {
     tone('--berry-d', '#a83c58'), tone('--glass-fg', '#f7f1e8')
   ];
   const bits = [];
-  for (let i = 0; i < 150; i++) {
+  const count = big ? 320 : 150;
+  for (let i = 0; i < count; i++) {
     bits.push({
       x: Math.random() * W,
-      y: -Math.random() * H * 0.5,
+      y: -Math.random() * H * (big ? 0.9 : 0.5),
       w: (5 + Math.random() * 7) * dpr,
       h: (8 + Math.random() * 10) * dpr,
-      vx: (Math.random() - 0.5) * 2.6 * dpr,
-      vy: (2 + Math.random() * 3.4) * dpr,
+      vx: (Math.random() - 0.5) * (big ? 3.4 : 2.6) * dpr,
+      vy: (2 + Math.random() * (big ? 4.6 : 3.4)) * dpr,
       rot: Math.random() * Math.PI,
       vr: (Math.random() - 0.5) * 0.24,
       c: colours[(Math.random() * colours.length) | 0]
     });
   }
 
-  const DUR = 3400;
+  const DUR = big ? 5200 : 3400;
   const t0 = performance.now();
   const frame = (now) => {
     const t = now - t0;
@@ -463,13 +501,13 @@ function stepConnect(data) {
           title: 'Connect to Tailscale',
           tag: 'turn on HTTPS in Tailscale',
           body: [
-            el('p', { class: 'step-say' }, 'Tawny is on your network, but your Tailscale account has not switched on the two features it needs to publish a web address: MagicDNS and HTTPS certificates. Until they are on, the https:// address will not exist and talk-back cannot work.'),
+            el('p', { class: 'step-say' }, 'Tawny is on your network, but your Tailscale account has not switched on the two features it needs to publish a web address: MagicDNS and HTTPS certificates. These are account-wide switches that only you can flip — a container cannot turn them on for you.'),
             el('div', { class: 'step-do' }, 'On the DNS page of your Tailscale admin console:',
               el('ol', {},
                 el('li', {}, 'Under "MagicDNS", press Enable.'),
                 el('li', {}, 'Under "HTTPS Certificates", press Enable HTTPS. (MagicDNS has to be on first.)'))),
             goLink(LINK.dns, 'Open Tailscale DNS settings'),
-            el('p', { class: 'step-say' }, 'Then restart the container. This is a one-time setting for your whole account — you will not touch it again.'),
+            el('p', { class: 'step-say' }, 'Then come back to this page and wait a few seconds — Tawny keeps retrying and will publish the address on its own. No restart. This is a one-time setting for your whole account.'),
             why('Why does Tawny need these turned on?',
               'MagicDNS is what gives every device on your network a name like tawny.your-tailnet.ts.net instead of a bare number. HTTPS certificates let Tailscale put a real, browser-trusted certificate on that name.',
               'Both together are what "tailscale serve" uses to front Tawny at a secure address. A browser only hands a page the microphone on a secure address, so without them there is no talk-back — and the plain http://…:8099 address is the LAN-only fallback.'),
@@ -483,8 +521,8 @@ function stepConnect(data) {
         title: 'Connect to Tailscale',
         tag: 'no web address',
         body: [
-          el('p', { class: 'step-say' }, 'You are on the network, but Tailscale could not publish Tawny at a web address — so the https:// address will not load, and talk-back will not work.'),
-          el('p', { class: 'step-do' }, 'A leftover setting from an earlier run is the usual cause. Run tailscale serve reset on this machine and restart the container. If that does not fix it, check that MagicDNS and HTTPS certificates are enabled on the DNS page of your Tailscale admin console.'),
+          el('p', { class: 'step-say' }, 'You are on the network, but Tailscale could not publish Tawny at a web address — so the https:// address will not load, and talk-back will not work. Tawny keeps retrying; if this does not clear on its own:'),
+          el('p', { class: 'step-do' }, 'A leftover setting from an earlier run is the usual cause. Run tailscale serve reset on this machine. If that does not fix it, check that MagicDNS and HTTPS certificates are enabled on the DNS page of your Tailscale admin console.'),
           goLink(LINK.dns, 'Open Tailscale DNS settings'),
           serve.detail ? el('pre', { class: 'step-log' }, serve.detail) : null
         ]
@@ -938,13 +976,23 @@ function renderVerdict(data, defs) {
   };
 
   if (allGood) {
-    set('ok', ICONS.tick, 'Tawny is ready',
-      'Everything is connected. Open this on whatever you want to watch from — step 5 walks through pairing the camera phone.');
+    finishUrl = `https://${tailscale.dnsName}/`;
+    setupComplete = true;
     box.classList.add('is-finish');
-    extra.append(openLink(`https://${tailscale.dnsName}/`));
-    maybeCelebrate();
+    if (openedApp) {
+      // They clicked through. Nothing left to do on this page.
+      set('ok', ICONS.tick, 'You’re all set 🎉',
+        'Tawny opened in a new tab. You can close this one — or press the back arrow (top-left) to open Tawny here instead.');
+      extra.append(openLink(finishUrl));
+    } else {
+      set('ok', ICONS.tick, 'Tawny is ready',
+        'Everything is connected. Open this on whatever you want to watch from — step 5 walks through pairing the camera phone.');
+      extra.append(openLink(finishUrl));
+      maybeCelebrate();
+    }
     return;
   }
+  setupComplete = false;
   sawIncomplete = true;
   if (failed || badLan) {
     set('bad', ICONS.cross, 'Something needs fixing',

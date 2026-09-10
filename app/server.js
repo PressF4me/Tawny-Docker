@@ -604,11 +604,21 @@ function lanInfo() {
 }
 
 async function setupStatus() {
-  const [startup, tailscale, coturn] = await Promise.all([
+  let [startup, tailscale, coturn] = await Promise.all([
     Promise.resolve(readStartupState()),
     tailscaleInfo().catch((e) => ({ configured: false, reason: String(e && e.message || e) })),
     coturnInfo().catch(() => ({ embedded: false, port: null, secretExists: false, listening: false }))
   ]);
+  // Zero-restart HTTPS: if we are joined but `serve` has not succeeded, retry it
+  // here. The operator flips MagicDNS + HTTPS certificates once in the admin
+  // console and the next poll (≤4 s) publishes the address — no `docker restart`.
+  if (tailscale.loggedIn && TAWNY_TS_MODE === 'own' && process.env.TS_SERVE !== 'off') {
+    const serveStep = [...startup].reverse().find((s) => s.step === 'tailscale_serve');
+    if (!serveStep || serveStep.ok === false) {
+      const r = await tryServe();
+      if (r.kind !== 'debounced' && r.kind !== 'skip') startup = readStartupState();
+    }
+  }
   return {
     generatedAt: new Date().toISOString(),
     startup,
@@ -734,15 +744,33 @@ async function joinTailnet(key) {
   }
   recordStep('tailscale_up', true, 'joined the tailnet from the setup page');
 
-  if (process.env.TS_SERVE !== 'off') {
-    const srv = await run('tailscale',
-      [`--socket=${TAWNY_TS_SOCKET}`, 'serve', '--bg', `http://127.0.0.1:${PORT}`], 30000);
-    if (srv.ok) recordStep('tailscale_serve', true, 'published over tailscale serve');
-    else recordStep('tailscale_serve', false, (srv.stderr || srv.error || '').trim().slice(0, 2000));
-  }
+  await tryServe();
 
   const route = await advertiseRoute();
   return { ok: true, route };
+}
+
+/**
+ * Publish Tawny over `tailscale serve` — idempotent, safe to call on every
+ * poll. Only ever on our own node (the operator's is theirs). Enabling the
+ * tailnet's MagicDNS + HTTPS-certificate switches cannot be done from a node
+ * auth key (no CLI, no public API for the HTTPS one), so this cannot turn them
+ * on for you — but it retries the moment you do, with no container restart.
+ * `tls_off` is the recorded kind when those switches are the reason.
+ */
+let lastServeTry = 0;
+async function tryServe() {
+  if (process.env.TS_SERVE === 'off' || TAWNY_TS_MODE !== 'own' || !TAWNY_TS_SOCKET) return { ok: false, kind: 'skip' };
+  const now = Date.now();
+  if (now - lastServeTry < 4000) return { ok: false, kind: 'debounced' };
+  lastServeTry = now;
+  const srv = await run('tailscale',
+    [`--socket=${TAWNY_TS_SOCKET}`, 'serve', '--bg', `http://127.0.0.1:${PORT}`], 30000);
+  if (srv.ok) { recordStep('tailscale_serve', true, 'published over tailscale serve'); return { ok: true }; }
+  const detail = (srv.stderr || srv.error || '').trim().slice(0, 2000);
+  const kind = /https|magicdns|cert|admin\/dns|enabling-https/i.test(detail) ? 'tls_off' : 'unknown';
+  recordStep('tailscale_serve', false, detail, kind);
+  return { ok: false, kind, detail };
 }
 
 /**

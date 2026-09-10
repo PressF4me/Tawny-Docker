@@ -513,7 +513,8 @@ if [ -n "$ts_sock" ] && [ "$ts_state" = Running ]; then
 			# `serve` says so on stderr — but spell it out here too.
 			if grep -qiE 'https|magicdns' "$RUN_DIR/ts-serve.log" 2>/dev/null; then
 				log "  ^ turn on MagicDNS and HTTPS certificates once at" >&2
-				log "    https://login.tailscale.com/admin/dns, then restart this container" >&2
+				log "    https://login.tailscale.com/admin/dns — server.js keeps retrying" >&2
+				log "    serve, so it publishes on its own within seconds, no restart" >&2
 			fi
 		fi
 	fi
