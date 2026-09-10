@@ -340,15 +340,26 @@ async function turnCreds(req) {
 
 // Blocks cross-site WebSocket hijacking: a page on evil.example cannot open a
 // socket here, because its Origin will not match the Host it was served from.
+//
+// The Tawny app is the exception, and a deliberate one: its WebView serves the
+// bundled page from http://127.0.0.1:<random-port> and dials this container as
+// its rendezvous, so its handshake carries Origin: http://127.0.0.1:<port> with
+// this node's ts.net Host — never same-origin. A loopback Origin (or the
+// `Origin: null` some WebViews send) cannot belong to a remote attacker page —
+// a browser sets Origin to the page's real origin and no internet page loads
+// from 127.0.0.1 — so it is always allowed. Same rule the cloud rendezvous
+// applies; see rendezvous/worker.js originOk(). The admission ticket and the
+// hashed room id are what actually gate a join.
 function originAllowed(req) {
   const origin = req.headers.origin;
-  if (!origin) return true; // non-browser client (native app)
+  if (!origin || origin === 'null') return true; // non-browser client, or a WebView that sends no real Origin
   let parsed;
   try { parsed = new URL(origin); } catch { return false; }
+  const oh = parsed.hostname.toLowerCase();
+  if (oh === '127.0.0.1' || oh === '::1' || oh === 'localhost') return true;
   const host = String(req.headers.host || '').toLowerCase();
   if (parsed.host.toLowerCase() === host) return true;
-  const bare = parsed.hostname.toLowerCase();
-  return ALLOWED_HOSTS.includes(bare) || ALLOWED_HOSTS.includes(parsed.host.toLowerCase());
+  return ALLOWED_HOSTS.includes(oh) || ALLOWED_HOSTS.includes(parsed.host.toLowerCase());
 }
 
 const fails = new Map(); // ip -> { n, until }
