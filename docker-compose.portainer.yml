@@ -1,16 +1,14 @@
 # Tawny — Portainer stack.
 #
-# Portainer's web editor has no source tree, so it cannot build from
-# ../frentalk. Build the image once on the Docker host, then deploy this.
-#
-# On the host, with frentalk/ and "Tawny Docker"/ side by side:
-#
-#   cd "Tawny Docker"
-#   docker build --network=host -f Dockerfile -t tawny:local ../frentalk
-#
-# Then: Portainer -> Stacks -> Add stack -> Web editor -> paste this file, and
-# set TS_AUTHKEY in the "Environment variables" box (get one at
+# Pulls the published image, ghcr.io/pressf4me/tawny:latest. Portainer ->
+# Stacks -> Add stack -> Web editor -> paste this file, and set TS_AUTHKEY in
+# the "Environment variables" box (get one at
 # https://login.tailscale.com/admin/settings/keys — Reusable, not Ephemeral).
+#
+# The package is private: add the registry once under Portainer -> Registries
+# (Custom registry, ghcr.io, your GitHub username, a PAT with read:packages),
+# or run `docker login ghcr.io` on the host first. To run your own build
+# instead, set `image:` to a tag you built per README.md "Building it yourself".
 #
 # Host networking is load-bearing: the container has to see the real LAN
 # interface to know which subnet to advertise into the tailnet, to reach the
@@ -24,7 +22,8 @@ name: tawny
 
 services:
   tawny:
-    image: tawny:local
+    image: "${TAWNY_IMAGE:-ghcr.io/pressf4me/tawny:${TAWNY_TAG:-latest}}"
+    pull_policy: always
     container_name: tawny
     restart: unless-stopped
     network_mode: host

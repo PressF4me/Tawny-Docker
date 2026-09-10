@@ -15,13 +15,11 @@ through it.
 ## Prerequisites
 
 - **Docker and Docker Compose v2** (`docker compose` not `docker-compose`).
-- **This folder and the `frentalk` checkout side by side** — the image builds
-  from `../frentalk`. Keep them in the same parent directory:
-  ```
-  Downloads/
-  ├─ frentalk/        the app  (server.js, public/, rendezvous/)
-  └─ Tawny Docker/    this folder
-  ```
+- That's it. The image is pulled from the GitHub Container Registry —
+  **`ghcr.io/pressf4me/tawny`** — so there is no source checkout to keep beside
+  this folder and nothing to build. All you need from this repo is
+  `docker-compose.yml`. To build the image yourself instead, see
+  [Building it yourself](#building-it-yourself).
 
 ---
 
@@ -52,12 +50,15 @@ browser-trusted HTTPS page to get a microphone) cannot work. If you have used
 
 ### 3. Start the container
 
-With this folder and the `frentalk` checkout side by side:
+From this folder (only `docker-compose.yml` is needed):
 
 ```sh
 echo 'TS_AUTHKEY=tskey-auth-xxxxxxxxxxxx' > .env
-docker compose up -d
+docker compose up -d      # pulls ghcr.io/pressf4me/tawny:latest
 ```
+
+To pin a version instead of tracking `latest`, add it to `.env`:
+`TAWNY_TAG=2.0.3`. Update later with `docker compose pull && docker compose up -d`.
 
 That is the whole configuration. On start the container joins your tailnet as a
 node called `tawny`, works out which LAN it is on, advertises that LAN into the
@@ -222,9 +223,33 @@ browser on their laptop, desktop, or phone, reached over your Tailscale. The
 Monitor phone stays stock.
 
 For **phone-to-phone remote pairing** — Monitor and Viewer both the Tawny app,
-on different networks — see `../frentalk/rendezvous/`: a separate deployment
-(Cloudflare Worker or Deno) that acts as the signalling introducer only. Both
-options can run at the same time; they are independent paths.
+on different networks — see the `rendezvous/` service in the Tawny Android repo:
+a separate deployment (Cloudflare Worker or Deno) that acts as the signalling
+introducer only. Both options can run at the same time; they are independent
+paths.
+
+---
+
+## Building it yourself
+
+The published image is what you get by default and is the supported path. To
+build locally — a fork, an unreleased change, an air-gapped registry:
+
+```sh
+bash tools/tawny-sync        # vendor the server payload into app/ from
+                             # ../Tawny Android (override with TAWNY_ANDROID=…)
+docker build --network=host -t ghcr.io/pressf4me/tawny:latest .
+docker compose up -d         # now uses your local image (pull_policy: missing)
+```
+
+`app/` holds a snapshot of the app's server (`server.js`, `public/`,
+`rendezvous/`, `docker/`) taken from the Tawny Android repo; `tools/tawny-sync`
+refreshes it and records the source commit in `app/.source-commit`. `--network=host`
+is only needed if your Docker bridge cannot reach the internet during `apk add`
+(a common symptom of a Tailscale/Mullvad nftables stack).
+
+Releases are built by `.github/workflows/release.yml` on a `vX.Y.Z` tag and
+pushed to GHCR for `linux/amd64` and `linux/arm64` with build provenance.
 
 ---
 

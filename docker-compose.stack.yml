@@ -1,21 +1,14 @@
 # Tawny — downloadable stack.
 #
-# This is the compose file to hand another machine. Unlike docker-compose.yml
-# it never builds: it pulls a prebuilt image from a registry, so it works with
-# nothing beside it — no frentalk/ checkout, no Dockerfile. Point Portainer
-# (Stacks -> Add stack -> Repository, or -> URL) or a plain `docker compose -f`
-# straight at it.
+# This is the compose file to hand another machine. Like docker-compose.yml it
+# pulls a prebuilt image and never builds — it just also carries no .env
+# defaults, so it drops straight into Portainer (Stacks -> Add stack ->
+# Repository, or -> URL) or a plain `docker compose -f`.
 #
-# ---------------------------------------------------------------------------
-# ONE-TIME: publish the image (on a box that has frentalk/ + "Tawny Docker"/
-# side by side)
-#
-#   cd "Tawny Docker"
-#   docker build --network=host -f Dockerfile -t ghcr.io/YOU/tawny:latest ../frentalk
-#   docker login ghcr.io          # or docker.io
-#   docker push ghcr.io/YOU/tawny:latest
-#
-# Rebuild + push again whenever server.js / public / rendezvous change.
+# The default image is the published one, ghcr.io/pressf4me/tawny:latest, built
+# and pushed by .github/workflows/release.yml on a vX.Y.Z tag. Override
+# TAWNY_IMAGE only for a fork or private mirror — to build that image, see
+# "Building it yourself" in README.md.
 # ---------------------------------------------------------------------------
 # DEPLOY on the other machine
 #
@@ -46,10 +39,9 @@ name: tawny
 
 services:
   tawny:
-    # The only required setting. No default on purpose: a wrong image that
-    # happened to exist would be worse than a clear "variable is not set".
-    # Defaults to the published image; override TAWNY_IMAGE to run your own build.
-    image: "${TAWNY_IMAGE:-ghcr.io/pressf4me/tawny:latest}"
+    # Defaults to the published image. Pin a version with TAWNY_TAG (e.g.
+    # 2.0.3), or point TAWNY_IMAGE at a full ref for a fork / private mirror.
+    image: "${TAWNY_IMAGE:-ghcr.io/pressf4me/tawny:${TAWNY_TAG:-latest}}"
     # A plain `docker compose up -d` re-pulls, so a pushed rebuild lands on the
     # next `up` / stack update without a manual `docker pull`.
     pull_policy: always

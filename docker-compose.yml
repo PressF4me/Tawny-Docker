@@ -25,30 +25,19 @@
 # this needs no NET_ADMIN and no /dev/net/tun. See docker-compose.portainer.yml
 # if host networking is not available to you.
 #
-# The image builds from this repo. The server payload under app/ is vendored
-# from the Tawny Android checkout by tools/tawny-sync — run that after pulling
-# server-side changes, then rebuild.
+# Pulls the published image from GHCR — nothing to build, no source checkout
+# needed. Pin a version with TAWNY_TAG in .env (e.g. TAWNY_TAG=2.0.3); the
+# default tracks :latest.
+#
+# To build it yourself instead: see "Building it yourself" in README.md
+# (bash tools/tawny-sync && docker build --network=host -t ghcr.io/pressf4me/tawny:latest .).
 
 name: tawny
 
 services:
   tawny:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      # The image installs tailscale and coturn from Alpine, so the BUILD has
-      # to reach the network. On a host whose container bridge cannot route out
-      # — a Tailscale or Mullvad nftables stack with a dropping FORWARD chain
-      # will do it — `apk add` dies with "exit code 2" or a DNS transient
-      # error, and nothing else says why. probe.sh retries with --network=host;
-      # compose has no retry, so it is pinned here.
-      #
-      # It only affects the build, never the running container, and the only
-      # cost is that the build shares the host's network namespace instead of
-      # an isolated one. Delete these two lines if your host builds fine
-      # without them.
-      network: host
-    image: tawny:local
+    image: "${TAWNY_IMAGE:-ghcr.io/pressf4me/tawny:${TAWNY_TAG:-latest}}"
+    pull_policy: missing
     container_name: tawny
     restart: unless-stopped
     network_mode: host
