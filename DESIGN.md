@@ -228,10 +228,10 @@ and Tawny declined to advertise the single route the remote path depends on.
 
 | Thing | File |
 |---|---|
-| HTTP listener, signalling, `/lan` bridge, host-derived `/config.json` + `/turn` | `../frentalk/server.js` |
-| tailscaled + `tailscale serve` + route advertisement, coturn, supervision | `../frentalk/docker/entrypoint.sh` |
-| Routing a pairing link's `h=` through the bridge | `../frentalk/public/app.js`, `adopt()` |
-| The Monitor's own LAN relay, and the CSP that constrains all of this | `../frentalk/android/.../LocalWeb.kt` |
+| HTTP listener, signalling, `/lan` bridge, host-derived `/config.json` + `/turn` | `app/server.js` |
+| tailscaled + `tailscale serve` + route advertisement, coturn, supervision | `app/docker/entrypoint.sh` |
+| Routing a pairing link's `h=` through the bridge | `app/public/app.js`, `adopt()` |
+| The Monitor's own LAN relay, and the CSP that constrains all of this | Tawny app: `android/.../LocalWeb.kt` |
 | Image | `Dockerfile` |
 | Deployment | `docker-compose.yml`, `docker-compose.portainer.yml` |
 | Everything above, checked | `probe.sh` |
@@ -249,7 +249,7 @@ and Tawny declined to advertise the single route the remote path depends on.
   between two phones on one Wi-Fi: signalling carries SDP and a hashed room id,
   never the channel key, and the media is DTLS-SRTP end to end regardless.
 * The channel key never reaches the container, and neither does a frame of
-  video. See `../frentalk/SECURITY.md`.
+  video. See the Tawny app's `SECURITY.md`.
 * `TS_AUTHKEY` is a bearer credential for joining your tailnet. Use a
   pre-approved reusable key, not an ephemeral one (an ephemeral node drops its
   advertised route when it goes offline). Keep it in `.env`, not in the compose
