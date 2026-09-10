@@ -8,7 +8,7 @@ Tailscale.
 nothing hosted by anyone else. You point an old phone at the pet and watch from
 a browser; the only thing that ever sees the stream is you.
 
-The **Monitor** is the Tawny Android app on an old phone pointed at the pet. The
+The **Monitor** is the Tawny Android app on an old phone pointed at your best friend, or your pet. The
 **Viewer** is a browser on a laptop, desktop, or another phone. This container
 serves the Viewer's page and joins your tailnet so the two ends can find each
 other; the video and audio go straight between them and never pass through it.
