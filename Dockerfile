@@ -25,7 +25,57 @@ ENV NODE_ENV=production
 #     candidate directly. That is the media path. See DESIGN.md.
 # coturn is the fallback for a network that blocks direct UDP. Both together are
 # well under half the image.
-RUN apk add --no-cache tailscale coturn
+#
+# tailscale comes from Tailscale, NOT from `apk add tailscale`. Alpine's package
+# lags upstream by many releases (this image shipped 1.98.5-AlpineLinux, with a
+# known vulnerability, long after upstream had moved on) and nothing about a tag
+# build would ever have moved it forward. These are the static binaries Tailscale
+# publishes and documents for containers; `?mode=json` names the current stable
+# tarball per architecture, so every build resolves whatever is current that day.
+#
+# TAILSCALE_VERSION=latest resolves at build time. Pass an explicit version
+# (--build-arg TAILSCALE_VERSION=1.90.2) to pin one — for reproducing an old
+# image, or to hold back a release that broke something. Note that a *local*
+# rebuild can serve this layer from Docker's cache and stay on the old version;
+# .github/workflows/release.yml sets no buildx cache, so a vX.Y.Z tag build
+# always starts cold and always resolves current.
+#
+# ca-certificates is not optional: these are static Go binaries and without the
+# system trust store tailscaled cannot complete TLS to controlplane.tailscale.com.
+# No iptables/ip6tables — tailscaled runs --tun=userspace-networking here and
+# touches no kernel netfilter state at all (see the long note in entrypoint.sh).
+ARG TARGETARCH
+ARG TAILSCALE_VERSION=latest
+RUN set -eu; \
+    apk add --no-cache coturn ca-certificates; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64|arm64|arm|386) tsarch="${TARGETARCH:-amd64}" ;; \
+      *) echo "no Tailscale static build for TARGETARCH=${TARGETARCH:-}" >&2; exit 1 ;; \
+    esac; \
+    if [ "$TAILSCALE_VERSION" = latest ]; then \
+      # Take the tarball *name* from the index rather than assembling one from a
+      # version string: it is the index's own answer for this architecture, so a
+      # change in their naming cannot silently 404 the build.
+      tgz="$(wget -qO- 'https://pkgs.tailscale.com/stable/?mode=json' | node -e '\
+        let s = ""; \
+        process.stdin.on("data", (d) => (s += d)).on("end", () => { \
+          const j = JSON.parse(s); \
+          process.stdout.write(String((j.Tarballs || {})[process.argv[1]] || "")); \
+        });' "$tsarch")"; \
+    else \
+      tgz="tailscale_${TAILSCALE_VERSION}_${tsarch}.tgz"; \
+    fi; \
+    [ -n "$tgz" ] || { echo "could not resolve a Tailscale tarball for $tsarch" >&2; exit 1; }; \
+    wget -qO /tmp/ts.tgz "https://pkgs.tailscale.com/stable/$tgz"; \
+    tar -xzf /tmp/ts.tgz -C /tmp; \
+    dir="/tmp/${tgz%.tgz}"; \
+    install -m 0755 "$dir/tailscale"  /usr/local/bin/tailscale; \
+    install -m 0755 "$dir/tailscaled" /usr/local/bin/tailscaled; \
+    rm -rf /tmp/ts.tgz "$dir"; \
+    # Fail the build here rather than at 3am in someone's living room if the
+    # binaries did not land on PATH — entrypoint.sh runs both by bare name.
+    tailscale version; \
+    tailscaled --version
 
 COPY app/package.json app/package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force

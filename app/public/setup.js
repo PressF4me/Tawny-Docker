@@ -536,7 +536,11 @@ function stepConnect(data) {
             why('Why does Tawny need these turned on?',
               'MagicDNS is what gives every device on your network a name like tawny.your-tailnet.ts.net instead of a bare number. HTTPS certificates let Tailscale put a real, browser-trusted certificate on that name.',
               'Both together are what "tailscale serve" uses to front Tawny at a secure address. A browser only hands a page the microphone on a secure address, so without them there is no talk-back — and the plain http://…:8099 address is the LAN-only fallback.'),
-            serve.detail ? el('pre', { class: 'step-log' }, serve.detail) : null
+            // `d`, not serve.detail: serveBroken is now also reached from the
+            // live "serve is not up" reading, and on that path there may be no
+            // tailscale_serve step at all — `serve` is then undefined and
+            // reading .detail off it throws, blanking the whole page.
+            d ? el('pre', { class: 'step-log' }, d) : null
           ]
         };
       }
@@ -549,7 +553,7 @@ function stepConnect(data) {
           el('p', { class: 'step-say' }, 'You are on the network, but Tailscale could not publish Tawny at a web address — so the https:// address will not load, and talk-back will not work. Tawny keeps retrying; if this does not clear on its own:'),
           el('p', { class: 'step-do' }, 'A leftover setting from an earlier run is the usual cause. Run tailscale serve reset on this machine. If that does not fix it, check that MagicDNS and HTTPS certificates are enabled on the DNS page of your Tailscale admin console.'),
           goLink(LINK.dns, 'Open Tailscale DNS settings'),
-          serve.detail ? el('pre', { class: 'step-log' }, serve.detail) : null
+          d ? el('pre', { class: 'step-log' }, d) : null   // see above: `serve` may be undefined here
         ]
       };
     }

@@ -395,13 +395,31 @@ function redactKey(s) {
  *   unknown — anything else.
  */
 function classifyUp(text) {
-  const t = String(text || '').toLowerCase();
-  // NoState alone is too noisy (brief on any fresh start). These are the
-  // signals of a persisted node key control refuses; `status` keeps echoing
-  // the last one, so callers fold `status` output into `text`.
-  if (/already exists|register request: http 4|last login error|wrong nodekey|duplicate node key/.test(t)) return 'stale';
-  if (/invalid key|bad authkey|authkey|expired|is not valid|requires an auth key|unauthorized|not permitted/.test(t)) return 'badkey';
-  if (/timeout|deadline|dial tcp|no route to host|lookup |i\/o timeout|connection refused|tls handshake/.test(t)) return 'network';
+  // Strip our own command line before matching. Node's execFile error message
+  // is "Command failed: <full argv>", so the text handed here routinely
+  // contains the flags we passed — and `--authkey=<redacted>` matches the
+  // badkey rule below while `--timeout=60s` matches the network one. Any
+  // failure whose stderr was empty therefore landed on "that key was refused",
+  // which is precisely the misdiagnosis this function exists to end.
+  const t = String(text || '').toLowerCase().replace(/--[a-z][\w-]*=\S*/g, ' ');
+  // Order matters, and so does what is NOT a signal. `stale` archives the node
+  // identity, so a household whose internet is down at boot would otherwise
+  // come back needing a fresh auth key and a fresh route approval — observed
+  // doing exactly that once the daemon's health was actually being read.
+  //   - "last login error" is not a stale signal: it is the wrapper Tailscale
+  //     puts round *every* failed login, DNS outages included.
+  //   - "register request: http 4" is not one on its own either — a refused
+  //     auth key returns 401 through the same path — so it is consulted only
+  //     after badkey and network.
+  //   - NoState alone is too noisy (brief on any fresh start).
+  // The first rule is unambiguous: control holds this node key and will not
+  // re-register it. `up`'s output always carries "timeout waiting for …" once
+  // --timeout fires, which is why network cannot be tested first.
+  // Kept in lockstep with ts_fail_kind() in docker/entrypoint.sh.
+  if (/already exists|wrong nodekey|duplicate node key|node key has been used/.test(t)) return 'stale';
+  if (/invalid key|bad authkey|authkey|expired|is not valid|requires an auth key|unauthorized|not permitted|http 401|http 403/.test(t)) return 'badkey';
+  if (/timeout|deadline|dial tcp|no route to host|lookup |failed to resolve|no dns|network is unreachable|i\/o timeout|connection refused|tls handshake/.test(t)) return 'network';
+  if (/register request: http 4/.test(t)) return 'stale';
   return 'unknown';
 }
 
@@ -512,11 +530,22 @@ async function tailscaleInfo() {
   if (serveRes.ok) {
     try {
       const j = JSON.parse(serveRes.stdout || '{}');
-      const mineProxy = `http://127.0.0.1:${PORT}`;
+      // Match on host and port, not on the exact string we passed in. The CLI
+      // stores a normalised form of the target, and a trailing slash or a
+      // `localhost` / `[::1]` spelling would read a perfectly good mount as
+      // broken — which now blocks completion outright *and* makes setupStatus
+      // re-run `tailscale serve` on every single poll.
+      const isMine = (u) => {
+        try {
+          const p = new URL(String(u || ''));
+          return ['127.0.0.1', 'localhost', '[::1]', '::1'].includes(p.hostname)
+            && p.port === String(PORT);
+        } catch { return false; }
+      };
       serving = false;
       for (const host of Object.values(j.Web || {})) {
         for (const h of Object.values((host && host.Handlers) || {})) {
-          if (h && h.Proxy === mineProxy) serving = true;
+          if (h && isMine(h.Proxy)) serving = true;
         }
       }
     } catch { serving = null; }
@@ -640,7 +669,13 @@ async function setupStatus() {
   // console and the next poll (≤4 s) publishes the address — no `docker restart`.
   if (tailscale.loggedIn && TAWNY_TS_MODE === 'own' && process.env.TS_SERVE !== 'off') {
     const serveStep = [...startup].reverse().find((s) => s.step === 'tailscale_serve');
-    if (!serveStep || serveStep.ok === false) {
+    // The live reading outranks the record. A stale-identity recovery archives
+    // the state dir, and `tailscale serve`'s configuration lives *in* that
+    // directory — so a successful self-heal silently takes the published
+    // address with it and leaves a "tailscale_serve ok" step behind describing
+    // a mount that no longer exists. (`tailscale serve reset` run on the box
+    // does the same.) Without this the address never came back.
+    if (!serveStep || serveStep.ok === false || tailscale.serving === false) {
       const r = await tryServe();
       if (r.kind !== 'debounced' && r.kind !== 'skip') startup = readStartupState();
     }
@@ -744,8 +779,22 @@ async function joinTailnet(key) {
   const up = await run('tailscale', args, 90000);
   if (!up.ok) {
     const detail = (up.stderr || up.error || '').trim().slice(0, 2000);
-    const health = await run('tailscale', [`--socket=${TAWNY_TS_SOCKET}`, 'status'], 4000);
-    const kind = classifyUp(`${detail}\n${health.stdout || ''}${health.stderr || ''}`);
+    // `status --json`, not plain `status`: in the states being classified here
+    // the plain output is the single line "Logged out." and nothing more,
+    // while the JSON `Health` array reliably carries "the last login error
+    // was: register request: http 400: node nodekey:… already exists" — the
+    // only string that separates a stale identity from a wrong key. Reading
+    // the plain output was letting `stale` go undetected. (Verified against
+    // the CLI in the image: plain status omits it, Health has it.)
+    const health = await run('tailscale', [`--socket=${TAWNY_TS_SOCKET}`, 'status', '--json'], 4000);
+    let healthText = `${health.stdout || ''}${health.stderr || ''}`;
+    try {
+      const hj = JSON.parse(health.stdout || '{}');
+      // Health is an array in current releases, a map in older ones.
+      const hs = Array.isArray(hj.Health) ? hj.Health : Object.values(hj.Health || {});
+      healthText = [hj.BackendState || '', ...hs.map(String)].join('\n');
+    } catch { /* not JSON — the raw output is still worth classifying on */ }
+    const kind = classifyUp(`${detail}\n${healthText}`);
 
     // A leftover node key control won't take back: no key the operator pastes
     // will ever fix this. Queue the archive-and-rejoin for the supervisor loop
@@ -919,6 +968,12 @@ function setupReady(s) {
   if (anyStepFailing(s.startup, ts)) return false;
   if (!lan.cidr || lan.looksLikeDockerBridge) return false;
   if (!ts.configured || !ts.reachable || !ts.loggedIn || !ts.dnsName) return false;
+  // A MagicDNS name exists the moment MagicDNS is switched on; the https://
+  // address only *works* once `tailscale serve` is fronting our port.
+  // renderVerdict() in public/setup.js waits for exactly this, and the two
+  // have to agree — a "/" that redirects into the app while the only address
+  // a browser will run it on is still 404ing is the disagreement this closes.
+  if (ts.serveWanted && ts.serving === false) return false;
   if ((ts.pendingRoutes || []).length) return false;
   // Somebody has to carry a route to the phone's LAN — but it does not have to
   // be us. This used to read any conflict with no route of *our own* as
