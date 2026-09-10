@@ -4,6 +4,10 @@ Run your own Tawny — the two-way pet monitor — as a container on a box at ho
 No account, no domain, no port forwarding, no certificates. It runs over your
 Tailscale.
 
+**A pet monitor with no paywalls.** No subscription, no locked features, no ads,
+nothing hosted by anyone else. You point an old phone at the pet and watch from
+a browser; the only thing that ever sees the stream is you.
+
 The **Monitor** is the Tawny Android app on an old phone pointed at the pet. The
 **Viewer** is a browser on a laptop, desktop, or another phone. This container
 serves the Viewer's page and joins your tailnet so the two ends can find each
