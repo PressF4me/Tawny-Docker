@@ -497,10 +497,30 @@ async function tailscaleInfo() {
     };
   }
 
-  const [statusRes, prefsRes] = await Promise.all([
+  const [statusRes, prefsRes, serveRes] = await Promise.all([
     run('tailscale', [`--socket=${TAWNY_TS_SOCKET}`, 'status', '--json']),
-    run('tailscale', [`--socket=${TAWNY_TS_SOCKET}`, 'debug', 'prefs'])
+    run('tailscale', [`--socket=${TAWNY_TS_SOCKET}`, 'debug', 'prefs']),
+    run('tailscale', [`--socket=${TAWNY_TS_SOCKET}`, 'serve', 'status', '--json'])
   ]);
+
+  // Is `tailscale serve` actually fronting *our* port right now? MagicDNS can
+  // hand out a DNSName while HTTPS certs are still off and serve is failing, so
+  // dnsName alone must never be read as "the address works". null = the CLI is
+  // too old for `serve status --json` and we cannot tell (fall back to the
+  // recorded step).
+  let serving = null;
+  if (serveRes.ok) {
+    try {
+      const j = JSON.parse(serveRes.stdout || '{}');
+      const mineProxy = `http://127.0.0.1:${PORT}`;
+      serving = false;
+      for (const host of Object.values(j.Web || {})) {
+        for (const h of Object.values((host && host.Handlers) || {})) {
+          if (h && h.Proxy === mineProxy) serving = true;
+        }
+      }
+    } catch { serving = null; }
+  }
 
   let self = null;
   let peers = [];
@@ -565,6 +585,12 @@ async function tailscaleInfo() {
     loggedIn: backendState === 'Running',
     dnsName: self ? String(self.DNSName || '').replace(/\.$/, '') : '',
     online: !!(self && self.Online),
+    // Whether `tailscale serve` is fronting our port (true/false), or null if
+    // the CLI could not say. serveWanted is false only when the operator turned
+    // it off (TS_SERVE=off) for a deployment behind its own TLS proxy — then the
+    // https address is not this container's job and completion does not wait on it.
+    serving,
+    serveWanted: process.env.TS_SERVE !== 'off',
     peers,
     advertisedRoutes: advertised,
     approvedRoutes,

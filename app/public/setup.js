@@ -44,6 +44,21 @@ function goLink(href, label) {
   return a;
 }
 
+/**
+ * Is the https://<node>.<tailnet>.ts.net address actually being served? A
+ * MagicDNS name (dnsName) can exist while HTTPS certs are off and `tailscale
+ * serve` is failing, so nothing may treat dnsName as "done".
+ *   true  — serve is fronting our port, or the operator turned serve off
+ *   false — serve is wanted but demonstrably not up (HTTPS switches, usually)
+ *   null  — the tailscale CLI could not say; fall back to the step record
+ */
+function serveState(ts) {
+  if (!ts || !ts.serveWanted) return true;
+  if (ts.serving === true) return true;
+  if (ts.serving === false) return false;
+  return null;
+}
+
 // render() rebuilds every step row on each 4 s poll, which used to snap any
 // open explainer shut — it looked like it "closed itself after a few seconds".
 // Remember which are open (keyed by their question) and restore on rebuild.
@@ -463,12 +478,19 @@ function stepConnect(data) {
   // when the machine was already running Tailscale, the honest answer is
   // "nothing, this step did itself".
   if (tailscale.loggedIn) {
-    if (serve && serve.ok === false) {
+    // "Joined" is not "finished". The address is only real once `tailscale
+    // serve` is fronting our port — treat a failed serve step AND a live
+    // "serve is not up" reading the same way, so the flow never reports done
+    // while HTTPS is still off.
+    const sv = serveState(tailscale);
+    const serveBroken = sv === false || (serve && serve.ok === false);
+
+    if (serveBroken) {
       // Tailscale prints a specific error when the tailnet has not turned on
       // the HTTPS/MagicDNS features `tailscale serve` needs. That is a switch
       // in the admin console, not a leftover setting — and it is off by
       // default on a brand-new tailnet, so it is the first thing to rule out.
-      const d = String(serve.detail || '');
+      const d = String((serve && serve.detail) || '');
 
       // Tawny is driving the machine's own tailscaled and that machine was
       // already serving something at its Tailscale address. Taking the mount
@@ -493,7 +515,10 @@ function stepConnect(data) {
 
       const needsHttps = /magicdns/i.test(d) ||
         (/https/i.test(d) && /enabl/i.test(d)) ||
-        /admin\/dns|1153|enabling-https/i.test(d);
+        /admin\/dns|1153|enabling-https/i.test(d) ||
+        // Serve is demonstrably not up and nothing errored loudly — on a fresh
+        // tailnet that is the MagicDNS / HTTPS-certificate switches every time.
+        (!d && sv === false);
 
       if (needsHttps) {
         return {
@@ -909,6 +934,7 @@ function stepWatch(data) {
   const { tailscale } = data;
   const ready = tailscale.loggedIn && tailscale.reachable && tailscale.dnsName
     && !(tailscale.pendingRoutes || []).length
+    && serveState(tailscale) !== false
     && !(data.startup || []).some((s) => s.ok === false);
 
   if (!ready) {
@@ -966,7 +992,10 @@ function renderVerdict(data, defs) {
     (tailscale.routeCoveredBy || []).length;
   const undecided = !carried && tailscale.routeChoice === 'unset';
   const allGood = tailscale.loggedIn && tailscale.reachable && !failed && !pending
-    && !badLan && !undecided && !!tailscale.dnsName;
+    && !badLan && !undecided && !!tailscale.dnsName
+    // dnsName exists as soon as MagicDNS is on; the address only *works* once
+    // `tailscale serve` is up. Never celebrate before that.
+    && serveState(tailscale) !== false;
 
   const set = (cls, ico, h, p) => {
     box.className = `verdict is-${cls}`;
