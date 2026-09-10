@@ -1,0 +1,678 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#fbf4f1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#191410" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; manifest-src 'self'; connect-src __TAWNY_CONNECT_SRC__; base-uri 'none'; form-action 'none'">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Tawny — Pet Monitor</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ========================== WELCOME ==========================
+     Every screen before the call is laid out the way the native shell lays
+     one out (MainActivity: column() + mountCentered() + a pinned primary()):
+     an optional app bar, one scrolling body, and the primary action parked in
+     thumb reach at the bottom above the gesture inset. -->
+<main id="welcome" class="screen app hero" tabindex="-1" hidden>
+  <div class="screen-body">
+   <div class="wrap">
+  <svg class="scene" viewBox="0 0 260 170" aria-hidden="true">
+    <line x1="30" y1="146" x2="230" y2="146" stroke="#ece0da" stroke-width="2" stroke-linecap="round"/>
+
+    <g class="scene-cat">
+      <path id="cat-tail" d="M96 138 C 128 140 140 110 128 90 C 122 80 111 79 107 88"
+            fill="none" stroke="#e86a83" stroke-width="7" stroke-linecap="round"/>
+      <path d="M66 140 C 58 96 70 74 88 74 C 106 74 118 96 110 140 Z"
+            fill="#ffffff" stroke="#e86a83" stroke-width="4"/>
+      <circle cx="88" cy="64" r="26" fill="#ffffff" stroke="#e86a83" stroke-width="4"/>
+      <path class="cat-ear" d="M68 48 L62 24 L84 42 Z"
+            fill="#ffffff" stroke="#e86a83" stroke-width="4" stroke-linejoin="round"/>
+      <path class="cat-ear" d="M108 48 L114 24 L92 42 Z"
+            fill="#ffffff" stroke="#e86a83" stroke-width="4" stroke-linejoin="round"/>
+      <ellipse class="eye" cx="80" cy="62" rx="3.2" ry="5" fill="#7fb6d9"/>
+      <ellipse class="eye" cx="96" cy="62" rx="3.2" ry="5" fill="#7fb6d9"/>
+      <path d="M88 70 l-4 4 h8 z" fill="#e86a83"/>
+      <g stroke="#c9c2cc" stroke-width="2" stroke-linecap="round">
+        <line x1="72" y1="72" x2="52" y2="68"/>
+        <line x1="72" y1="77" x2="52" y2="79"/>
+        <line x1="104" y1="72" x2="124" y2="68"/>
+        <line x1="104" y1="77" x2="124" y2="79"/>
+      </g>
+    </g>
+
+    <g class="scene-dog">
+      <path id="dog-tail" d="M164 140 C 150 138 145 118 150 106"
+            fill="none" stroke="#e86a83" stroke-width="7" stroke-linecap="round"/>
+      <path d="M150 140 C 144 100 156 80 176 80 C 196 80 208 100 202 140 Z"
+            fill="#ffffff" stroke="#e86a83" stroke-width="4"/>
+      <circle cx="176" cy="74" r="24" fill="#ffffff" stroke="#e86a83" stroke-width="4"/>
+      <path class="dog-ear" d="M158 56 C 147 58 145 84 156 92 C 162 82 161 64 165 58 Z"
+            fill="#ffffff" stroke="#e86a83" stroke-width="4" stroke-linejoin="round"/>
+      <path class="dog-ear" d="M194 56 C 205 58 207 84 196 92 C 190 82 191 64 187 58 Z"
+            fill="#ffffff" stroke="#e86a83" stroke-width="4" stroke-linejoin="round"/>
+      <ellipse cx="176" cy="86" rx="12" ry="9" fill="#44434f" stroke="#e86a83" stroke-width="3"/>
+      <circle class="eye" cx="168" cy="72" r="3.4" fill="#7fb6d9"/>
+      <circle class="eye" cx="184" cy="72" r="3.4" fill="#7fb6d9"/>
+      <circle cx="176" cy="82" r="3.5" fill="#e86a83"/>
+    </g>
+  </svg>
+
+  <header class="brand">
+    <div>
+      <h1>Tawny</h1>
+      <p class="sub">Pet Monitor</p>
+    </div>
+  </header>
+
+  <p class="welcome-lede">Keep an eye on your pet from anywhere in the house.
+    Two phones on your Wi-Fi — no accounts, nothing to set up.</p>
+   </div>
+  </div>
+
+  <div class="screen-foot">
+    <div class="wrap">
+      <button id="welcome-go" class="wide primary" type="button">Get started</button>
+      <button id="welcome-skip" class="linkbtn" type="button">I've set this up before</button>
+    </div>
+  </div>
+</main>
+
+<!-- ======================= SETUP · ROLE ======================== -->
+<main id="setup-role" class="screen app" tabindex="-1" hidden>
+  <header class="appbar">
+    <button id="setup-back" class="appbar-back" type="button" aria-label="Back">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4.5 7.8 12 15 19.5"/></svg>
+    </button>
+    <div class="appbar-titles">
+      <h1>This device</h1>
+      <p class="appbar-sub">Which job is it doing?</p>
+    </div>
+    <span class="appbar-slot"></span>
+  </header>
+
+  <div class="screen-body">
+   <div class="wrap">
+    <div class="roles">
+      <button id="setup-watcher" class="role-card big" type="button">
+        <span class="role-critter" aria-hidden="true">
+          <svg viewBox="0 0 64 64">
+            <path d="M16 27 L12.5 7 L29 18 Z M48 27 L51.5 7 L35 18 Z"/>
+            <circle cx="32" cy="35" r="18"/>
+          </svg>
+        </span>
+        <span class="role-emoji" aria-hidden="true">
+          <svg viewBox="0 0 48 48">
+            <rect x="12" y="9" width="13" height="7" rx="3" fill="var(--acc)"/>
+            <rect x="5" y="14" width="38" height="25" rx="6" fill="var(--acc)"/>
+            <circle cx="24" cy="26.5" r="8" fill="var(--panel)"/>
+            <circle cx="24" cy="26.5" r="4.2" fill="var(--acc)"/>
+            <circle cx="21.6" cy="24.1" r="1.5" fill="var(--panel)"/>
+            <circle cx="37" cy="19.5" r="1.8" fill="var(--panel)"/>
+          </svg>
+        </span>
+        <span class="role-tag">The Monitor</span>
+        <strong>Stays with your pet</strong>
+        <em>Plug it in and point the camera. It sends video and sound, answers on
+          its own, and shows a code for the Viewer to scan.</em>
+        <span class="role-go" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M9 4.5 16.2 12 9 19.5"/></svg>
+        </span>
+      </button>
+
+      <button id="setup-handheld" class="role-card big" type="button">
+        <span class="role-critter" aria-hidden="true">
+          <svg viewBox="0 0 64 64">
+            <path d="M16 19 C 8 23 8 45 18 47 C 21 38 19 25 22 21 Z
+                     M48 19 C 56 23 56 45 46 47 C 43 38 45 25 42 21 Z"/>
+            <circle cx="32" cy="33" r="17"/>
+          </svg>
+        </span>
+        <span class="role-emoji" aria-hidden="true">
+          <svg viewBox="0 0 48 48">
+            <rect x="13" y="4" width="22" height="40" rx="6" fill="var(--acc)"/>
+            <rect x="16.5" y="9.5" width="15" height="26" rx="3" fill="var(--panel)"/>
+            <rect x="20.5" y="39.2" width="7" height="2" rx="1" fill="var(--panel)"/>
+            <circle cx="24" cy="6.6" r="1" fill="var(--panel)"/>
+          </svg>
+        </span>
+        <span class="role-tag">The Viewer</span>
+        <strong>Comes with you</strong>
+        <em>See what the Monitor sees, listen in, hold to talk back, ring a chime,
+          or save a snapshot.</em>
+        <span class="role-go" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M9 4.5 16.2 12 9 19.5"/></svg>
+        </span>
+      </button>
+    </div>
+
+    <p id="setup-note" class="note" hidden></p>
+   </div>
+  </div>
+</main>
+
+<!-- ==================== SETUP · WATCHER QR ==================== -->
+<main id="watch-pair" class="screen app" tabindex="-1" hidden>
+  <header class="appbar">
+    <button id="wp-back" class="appbar-back" type="button" aria-label="Back">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4.5 7.8 12 15 19.5"/></svg>
+    </button>
+    <div class="appbar-titles">
+      <h1>The Monitor</h1>
+      <p class="appbar-sub">Show this to the Viewer</p>
+    </div>
+    <span class="appbar-slot"></span>
+  </header>
+
+  <div class="screen-body">
+   <div class="wrap center-text">
+    <canvas id="wp-qr" class="qr" width="300" height="300"></canvas>
+
+    <p id="wp-warn" class="warn" hidden></p>
+
+    <p class="hint">On the other phone, open Tawny, choose <b>The Viewer</b>,
+      and point its camera at this code.</p>
+
+    <div class="wp-share">
+      <p class="wp-share-label">Can't scan? Send this link instead</p>
+      <code id="wp-url" class="pair-url"></code>
+      <button id="wp-copy" class="wide ghost" type="button">Copy pairing link</button>
+
+      <details id="wp-relay" class="relay-hint" hidden>
+        <summary>Pairing with the Tawny app?</summary>
+        <div class="relay-hint-body">
+          <p>The app can't open a web link. On that phone, open Tawny, press and
+            hold the version number at the bottom of the first screen, then choose
+            <b>Servers</b> and paste this into <b>Rendezvous</b>.</p>
+          <code id="wp-relay-addr" class="pair-url"></code>
+          <button id="wp-relay-copy" class="wide ghost" type="button">Copy server address</button>
+          <p class="fine">Both devices have to use the same server to find each other.</p>
+        </div>
+      </details>
+    </div>
+
+    <div class="wp-wait">
+      <span class="spinner" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span id="wp-status">Waiting for the Viewer</span>
+    </div>
+   </div>
+  </div>
+
+  <div class="screen-foot">
+    <div class="wrap">
+      <button id="wp-start" class="wide primary" type="button">Start watching now</button>
+      <button id="wp-later" class="linkbtn" type="button">Set up later</button>
+    </div>
+  </div>
+</main>
+
+<!-- ========================== CHANNELS ========================== -->
+<main id="channels" class="screen app" tabindex="-1" hidden>
+  <header class="appbar">
+    <img class="appbar-mark" src="icon.svg" alt="" width="30" height="30">
+    <div class="appbar-titles">
+      <h1 class="wordmark">Tawny</h1>
+      <p class="appbar-sub">Pet Monitor</p>
+    </div>
+    <button id="ch-add" class="appbar-action" type="button" aria-label="New channel"
+            title="New channel">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13"/></svg>
+    </button>
+  </header>
+
+  <div class="screen-body">
+   <div class="wrap">
+    <section class="block">
+      <div class="block-head">
+        <h2>Channels</h2>
+      </div>
+
+      <ul id="ch-list" class="ch-list"></ul>
+
+      <div id="ch-empty" class="empty-state" hidden>
+        <svg class="doze" viewBox="0 0 160 110" aria-hidden="true">
+          <ellipse class="doze-shadow" cx="80" cy="93" rx="46" ry="7"/>
+          <g class="doze-cat">
+            <path class="doze-body" d="M34 92 C 30 66 48 54 74 56 C 104 58 124 70 126 84 C 127 90 120 92 112 92 Z"/>
+            <circle class="doze-head" cx="44" cy="66" r="17"/>
+            <path class="doze-body" d="M32 54 L29 40 L42 50 Z M56 54 L59 40 L46 50 Z"/>
+            <path class="doze-line" d="M36 68 q4 4 8 0" />
+            <path class="doze-line" d="M48 68 q4 4 8 0" />
+            <path class="doze-tail" d="M126 86 C 140 84 142 70 132 64"/>
+          </g>
+          <g class="doze-z">
+            <text x="98" y="42" class="z1">z</text>
+            <text x="112" y="30" class="z2">z</text>
+            <text x="126" y="20" class="z3">z</text>
+          </g>
+        </svg>
+        <p>Nothing paired yet</p>
+        <span>Set up the phone that stays with your pet as The Monitor, then scan
+          its pairing code on this one.</span>
+        <button id="ch-empty-go" class="wide primary" type="button">Set this up</button>
+      </div>
+    </section>
+
+    <section class="block">
+      <div class="block-head"><h2>Join a Monitor</h2></div>
+      <p class="hint">Point your phone's camera at the pairing code shown by The
+        Monitor. It opens this page already set up.</p>
+      <button id="ch-scan" class="wide" type="button" hidden>Scan pairing code</button>
+    </section>
+
+    <p id="ch-note" class="note" hidden></p>
+
+    <footer class="fine">
+    Video and audio travel straight between your devices. The server only
+    introduces the two phones to each other, and never gets the key that
+    unlocks the picture.
+    <br>
+    Tawny is free and unlocks nothing for money — chipping in only helps pay the
+    running costs.
+
+    <!-- Hand-rolled, first-party buttons. The official Ko-fi widget is a
+         third-party <script> plus an inline init, and this page runs inside the
+         WebView that also owns the TawnyNative bridge under a strict
+         `script-src 'self'` CSP (SECURITY.md, "WebView hardening"). Loading it
+         would mean allowing a remote origin and 'unsafe-inline' in there — a
+         real regression to buy a button we can draw ourselves. -->
+    <span class="tips">
+      <a class="tip tip-kofi" href="https://ko-fi.com/tawnyone"
+         target="_blank" rel="noopener noreferrer">
+        <span class="tip-mark">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M12 7.3C9.1 5.3 8.5 3.9 9.3 3c.6-.7 1.8-.5 2.7.6.9-1.1 2.1-1.3 2.7-.6.8.9.2 2.3-2.7 4.3z"/>
+            <path d="M3.8 9.2h12.4v6.6a4.8 4.8 0 0 1-4.8 4.8H8.6a4.8 4.8 0 0 1-4.8-4.8z"/>
+            <path d="M16.7 10.6h1.1a3.2 3.2 0 0 1 0 6.4h-1.1v-2h1a1.2 1.2 0 0 0 0-2.4h-1z"/>
+            <path d="M3.1 21.1h13.8a.85.85 0 0 1 0 1.7H3.1a.85.85 0 0 1 0-1.7z"/>
+          </svg>
+        </span>
+        <span class="tip-label">
+          <span class="tip-base">Support Tawny on Ko-fi</span>
+          <span class="tip-alt" aria-hidden="true">ko-fi.com</span>
+        </span>
+      </a>
+
+      <a class="tip tip-bolt" href="https://strike.me/@loustrikes"
+         target="_blank" rel="noopener noreferrer">
+        <span class="tip-mark">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M15 1.8 5.8 13.2h5.2L9 22.2l9.2-11.4H13z"/>
+          </svg>
+        </span>
+        <span class="tip-label">
+          <span class="tip-base">Tip in Bitcoin</span>
+          <span class="tip-alt" aria-hidden="true">strike.me</span>
+        </span>
+      </a>
+    </span>
+    </footer>
+   </div>
+  </div>
+</main>
+
+<!-- ============================ ROLE ============================ -->
+<main id="role" class="screen app" tabindex="-1" hidden>
+  <header class="appbar">
+    <button id="role-back" class="appbar-back" type="button" aria-label="Back to channels">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4.5 7.8 12 15 19.5"/></svg>
+    </button>
+    <div class="appbar-titles">
+      <h1 id="role-name">Living room</h1>
+      <p class="appbar-sub">Pick this device's job</p>
+    </div>
+    <span class="appbar-slot"></span>
+  </header>
+
+  <div class="screen-body">
+   <div class="wrap">
+    <div class="roles">
+      <button id="pick-station" class="role-card" type="button">
+        <span class="role-critter" aria-hidden="true">
+          <svg viewBox="0 0 64 64">
+            <path d="M16 27 L12.5 7 L29 18 Z M48 27 L51.5 7 L35 18 Z"/>
+            <circle cx="32" cy="35" r="18"/>
+          </svg>
+        </span>
+        <span class="role-emoji" aria-hidden="true">
+          <svg viewBox="0 0 48 48">
+            <rect x="12" y="9" width="13" height="7" rx="3" fill="var(--acc)"/>
+            <rect x="5" y="14" width="38" height="25" rx="6" fill="var(--acc)"/>
+            <circle cx="24" cy="26.5" r="8" fill="var(--panel)"/>
+            <circle cx="24" cy="26.5" r="4.2" fill="var(--acc)"/>
+            <circle cx="21.6" cy="24.1" r="1.5" fill="var(--panel)"/>
+            <circle cx="37" cy="19.5" r="1.8" fill="var(--panel)"/>
+          </svg>
+        </span>
+        <span class="role-tag">The Monitor</span>
+        <strong>Leave it with the pet</strong>
+        <em>Sends camera and microphone, answers on its own, plays chimes, and
+          shows a pairing code for your phone.</em>
+        <span class="role-go" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M9 4.5 16.2 12 9 19.5"/></svg>
+        </span>
+      </button>
+
+      <button id="pick-viewer" class="role-card" type="button">
+        <span class="role-critter" aria-hidden="true">
+          <svg viewBox="0 0 64 64">
+            <path d="M16 19 C 8 23 8 45 18 47 C 21 38 19 25 22 21 Z
+                     M48 19 C 56 23 56 45 46 47 C 43 38 45 25 42 21 Z"/>
+            <circle cx="32" cy="33" r="17"/>
+          </svg>
+        </span>
+        <span class="role-emoji" aria-hidden="true">
+          <svg viewBox="0 0 48 48">
+            <rect x="13" y="4" width="22" height="40" rx="6" fill="var(--acc)"/>
+            <rect x="16.5" y="9.5" width="15" height="26" rx="3" fill="var(--panel)"/>
+            <rect x="20.5" y="39.2" width="7" height="2" rx="1" fill="var(--panel)"/>
+            <circle cx="24" cy="6.6" r="1" fill="var(--panel)"/>
+          </svg>
+        </span>
+        <span class="role-tag">The Viewer</span>
+        <strong>Keep it with you</strong>
+        <em>Watch and listen, hold to talk, ring a chime, save a snapshot.</em>
+        <span class="role-go" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M9 4.5 16.2 12 9 19.5"/></svg>
+        </span>
+      </button>
+    </div>
+
+    <p id="role-note" class="note" hidden></p>
+   </div>
+  </div>
+</main>
+
+<!-- ============================ JOIN ============================ -->
+<main id="join" class="screen app hero" tabindex="-1" hidden>
+  <div class="screen-body">
+   <div class="wrap center-text">
+    <span class="join-seal" aria-hidden="true">
+      <img class="join-mark" src="icon.svg" alt="" width="60" height="60">
+    </span>
+    <h1 class="hero-title">Pairing code accepted</h1>
+    <p class="join-body">You're about to join <b id="join-name">the monitor</b> as
+      a handset.</p>
+    <p id="join-note" class="warn" hidden></p>
+   </div>
+  </div>
+
+  <div class="screen-foot">
+    <div class="wrap">
+      <button id="join-go" class="wide primary" type="button">Join now</button>
+      <button id="join-cancel" class="wide ghost" type="button">Not now</button>
+    </div>
+  </div>
+</main>
+
+<!-- ============================ LIVE ============================ -->
+<main id="live" class="screen" hidden>
+  <div class="stage">
+    <video id="remote" playsinline autoplay muted hidden></video>
+    <!-- Remote audio rides its own element: Android WebView will not reliably
+         play an audio-only stream out of a hidden <video>. -->
+    <audio id="remote-audio" autoplay></audio>
+    <!-- The Watcher mounts one hidden <audio> per connected Handheld for
+         talk-back; empty on the Handheld. -->
+    <div id="peer-audio" hidden></div>
+
+    <div id="loader" class="loader" role="status" aria-label="Connecting" data-i18n-aria="w_aria_connecting" hidden>
+      <i></i><i></i><i></i><i></i><i></i>
+    </div>
+
+    <video id="local" playsinline autoplay muted hidden></video>
+
+    <div id="rail" class="rail">
+      <div class="rail-left">
+        <span id="dot" class="dot"></span>
+        <span id="statusline" data-i18n="w_status_connecting">Connecting</span>
+      </div>
+      <div id="meter" class="meter" role="img" aria-label="Sound level at the far end" data-i18n-aria="w_aria_sound_level"></div>
+      <div class="rail-right">
+        <span id="peercount" class="tag-count" hidden aria-label="Phones watching" data-i18n-aria="w_aria_phones_watching">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2.5" width="12" height="19" rx="2.6"/><line x1="10.5" y1="18.4" x2="13.5" y2="18.4"/></svg><b></b>
+        </span>
+        <span id="peerlabel" class="tag-device" hidden></span>
+        <!-- Handheld only: the Monitor's live battery, mirrored as it changes. -->
+        <span id="battchip" class="tag-batt" hidden>
+          <svg viewBox="0 0 30 14" aria-hidden="true" class="batt-ico">
+            <rect x="1" y="2" width="24" height="10" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.5"/>
+            <rect x="26" y="4.6" width="2.6" height="4.8" rx="1" fill="currentColor"/>
+            <rect class="batt-fill" x="3" y="4" width="20" height="6" rx="1" fill="currentColor"/>
+          </svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="batt-bolt"><path d="M13 2 5 13.5h5.5L9 22l9-12h-6l1-8Z" fill="currentColor"/></svg>
+          <b class="batt-pct"></b>
+        </span>
+        <!-- Kept only so older references resolve: the safety code no longer
+             sits in the rail, it is the first-connection card and nothing else. -->
+        <span id="sas-chip" hidden></span>
+        <span id="channel"></span>
+      </div>
+    </div>
+
+    <!-- One centred message over the video. Two overlays fighting for the same
+         spot is how the SAS card ended up on top of the picture-in-picture. -->
+    <div id="stage-note" class="stage-note" hidden>
+      <strong id="stage-note-title"></strong>
+      <span id="stage-note-body"></span>
+    </div>
+
+    <div id="talkflag" class="talkflag" data-i18n="w_listening_to_you" hidden>Listening to you</div>
+
+    <!-- Lens selector — shown when the monitor has multiple cameras -->
+    <div id="lens-bar" class="lens-bar" hidden></div>
+    <!-- Zoom level indicator — appears during pinch, fades out -->
+    <div id="zoom-chip" class="zoom-chip" hidden></div>
+
+    <!-- Hold-to-talk: a floating key of its own, big enough for a thumb to
+         hold without hunting for it — see the .talk-fab note in style.css
+         for why this moved out of the control row. Viewer only; CSS keys
+         its visibility off #live[data-role]. -->
+    <button id="btn-talk" class="talk-fab" type="button" aria-label="Hold to talk" data-i18n-aria="w_hold_to_talk">
+      <svg class="talk-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0"/><path d="M12 17v4M9 21h6"/></svg>
+      <span class="talk-state" data-i18n="w_hold_to_talk">Hold to talk</span>
+    </button>
+
+    <div id="sas" class="sas" hidden>
+      <!-- Replaced from app.js before this card is ever shown: the Monitor is
+           asking about one named phone, a Handheld about its own connection. -->
+      <p id="sas-note" data-i18n="w_sas_note_default">Check this code matches the one on the other phone:</p>
+      <strong id="sas-code" class="sas-code"></strong>
+      <div class="sas-actions">
+        <button id="sas-ok" type="button" class="wide primary" data-i18n="w_sas_looks_right">Looks right</button>
+        <button id="sas-no" type="button" class="wide ghost" data-i18n="w_sas_disconnect">Disconnect</button>
+      </div>
+    </div>
+  </div>
+
+  <nav id="controls-viewer" class="controls" hidden>
+    <button id="btn-chime" class="ctl" type="button">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 3H4l2-3Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg></span>
+      <span data-i18n="w_ctl_chime">Chime</span>
+    </button>
+    <button id="btn-torch" class="ctl" type="button" aria-pressed="false">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5.6h8l-1.3 3.8H9.3L8 5.6Z"/><path d="M9.3 9.4h5.4v10.2a1.8 1.8 0 0 1-1.8 1.8h-1.8a1.8 1.8 0 0 1-1.8-1.8V9.4Z"/><path d="M9.7 13.4h4.6"/><g class="beam"><path d="M12 3.4V1.6"/><path d="M6.9 4.5 5.7 3"/><path d="m17.1 4.5 1.2-1.5"/></g></svg></span>
+      <span data-i18n="w_ctl_light">Light</span>
+    </button>
+    <button id="btn-cam" class="ctl" type="button">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10.5 5-2.5v8l-5-2.5"/></svg></span>
+      <span data-i18n="w_ctl_my_camera">My camera</span>
+    </button>
+    <button id="btn-snap" class="ctl" type="button">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L18 8h2a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="3.5"/></svg></span>
+      <span data-i18n="w_ctl_snapshot">Snapshot</span>
+    </button>
+    <button id="btn-video" class="ctl" type="button" aria-pressed="false">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><circle class="rec-dot" cx="12" cy="12" r="6.5" fill="currentColor" stroke="none"/></svg></span>
+      <span data-i18n="w_ctl_record">Record</span>
+    </button>
+    <button id="btn-leave" class="ctl danger" type="button">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path transform="rotate(135 12 12)" d="M12 9c-2.4 0-4.7.37-6.86 1.05-.9.28-1.53 1.09-1.62 2.02l-.15 1.52a1.5 1.5 0 0 0 1.02 1.57l2.53.84a1.5 1.5 0 0 0 1.9-.98l.5-1.6c1.98-.6 4.42-.6 6.4 0l.5 1.6a1.5 1.5 0 0 0 1.9.98l2.53-.84a1.5 1.5 0 0 0 1.02-1.57l-.15-1.52c-.09-.93-.72-1.74-1.62-2.02A23.2 23.2 0 0 0 12 9Z"/></svg></span>
+      <span data-i18n="w_ctl_hang_up">Hang up</span>
+    </button>
+  </nav>
+
+  <nav id="controls-station" class="controls" hidden>
+    <button id="btn-flip" class="ctl" type="button">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><circle cx="12" cy="13.5" r="3"/><path d="M9 4h6"/><path d="M15.5 12.5a3.5 3.5 0 0 0-6-2M8.5 14.5a3.5 3.5 0 0 0 6 2"/></svg></span>
+      <span data-i18n="w_ctl_flip_camera">Flip camera</span>
+    </button>
+    <button id="btn-mute" class="ctl" type="button">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0"/><path d="M12 17v4M9 21h6"/><line class="slash" x1="4" y1="3.5" x2="20" y2="20.5"/></svg></span>
+      <span data-i18n="w_ctl_mute_mic">Mute mic</span>
+    </button>
+    <button id="btn-dim" class="ctl" type="button">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13A8 8 0 1 1 11 4a6 6 0 0 0 9 9Z"/></svg></span>
+      <span data-i18n="w_ctl_dim_screen">Dim screen</span>
+    </button>
+    <button id="btn-stop" class="ctl danger" type="button">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path transform="rotate(135 12 12)" d="M12 9c-2.4 0-4.7.37-6.86 1.05-.9.28-1.53 1.09-1.62 2.02l-.15 1.52a1.5 1.5 0 0 0 1.02 1.57l2.53.84a1.5 1.5 0 0 0 1.9-.98l.5-1.6c1.98-.6 4.42-.6 6.4 0l.5 1.6a1.5 1.5 0 0 0 1.9.98l2.53-.84a1.5 1.5 0 0 0 1.02-1.57l-.15-1.52c-.09-.93-.72-1.74-1.62-2.02A23.2 23.2 0 0 0 12 9Z"/></svg></span>
+      <span data-i18n="w_ctl_end_call">End call</span>
+    </button>
+  </nav>
+
+  <div id="chimes" class="chimes" hidden>
+    <button type="button" data-sound="bark" data-i18n="w_chime_bark">Dog toy</button>
+    <button type="button" data-sound="pspsps" data-i18n="w_chime_pspsps">Psp psp psp</button>
+    <button type="button" data-sound="meow" data-i18n="w_chime_meow">Meow</button>
+    <button type="button" data-sound="goodboy" data-i18n="w_chime_goodboy">Good boy</button>
+    <button type="button" data-sound="bell" data-i18n="w_chime_bell">Bell</button>
+  </div>
+</main>
+
+<!-- ========================== PAIRING ===========================
+     The three sheets below slide up from the bottom edge behind a fading
+     scrim, the way a phone presents a modal — see openSheet()/closeSheet()
+     in app.js and the `.sheet` block in style.css. -->
+<div id="pair" class="sheet" hidden>
+  <div class="sheet-card" role="dialog" aria-modal="true" aria-label="Pair a handset">
+    <span class="sheet-grip" aria-hidden="true"></span>
+    <h2>Pair a handset</h2>
+    <p class="hint">Point your phone's camera at this code. It opens Tawny
+      already joined to <b id="pair-name"></b>.</p>
+
+    <canvas id="qr" class="qr" width="300" height="300"></canvas>
+
+    <p id="pair-expiry" class="hint"></p>
+
+    <label class="field">
+      <span>Address the handset will use</span>
+      <select id="pair-profile"></select>
+    </label>
+
+    <div id="pair-custom-wrap" class="field" hidden>
+      <span>Address</span>
+      <input id="pair-custom" spellcheck="false" autocapitalize="off"
+             placeholder="https://tawny.example.net">
+    </div>
+
+    <p id="pair-warn" class="warn" hidden></p>
+
+    <code id="pair-url" class="pair-url"></code>
+
+    <details id="pair-relay" class="relay-hint" hidden>
+      <summary>Pairing with the Tawny app?</summary>
+      <div class="relay-hint-body">
+        <p>The app can't open a web link. On that phone, open Tawny, press and
+          hold the version number at the bottom of the first screen, then choose
+          <b>Servers</b> and paste this into <b>Rendezvous</b>.</p>
+        <code id="pair-relay-addr" class="pair-url"></code>
+        <button id="pair-relay-copy" class="wide ghost" type="button">Copy server address</button>
+        <p class="fine">Both devices have to use the same server to find each other.</p>
+      </div>
+    </details>
+
+    <div class="sheet-actions">
+      <button id="pair-copy" class="wide ghost" type="button">Copy link</button>
+      <button id="pair-close" class="wide" type="button">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================= NEW CHANNEL ======================== -->
+<div id="editor" class="sheet" hidden>
+  <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="editor-title">
+    <span class="sheet-grip" aria-hidden="true"></span>
+    <h2 id="editor-title">New channel</h2>
+    <label class="field">
+      <span>Name</span>
+      <input id="editor-name" maxlength="40" spellcheck="false" placeholder="Living room">
+    </label>
+    <p class="hint" id="editor-hint">A fresh key is generated for this channel.
+      Only devices you pair can join it.</p>
+    <div class="sheet-actions">
+      <button id="editor-cancel" class="wide ghost" type="button">Cancel</button>
+      <button id="editor-save" class="wide primary" type="button">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== CHANNEL ROW OVERFLOW ====================
+     The trailing "⋯" on a channel row opens this, rather than parking two
+     tiny glyph buttons on the row itself. Same shape as the native app's
+     long-press menu on a session card (MainActivity.showSessionsHome). -->
+<div id="row-menu" class="sheet" hidden>
+  <div class="sheet-card menu-card" role="dialog" aria-modal="true" aria-labelledby="row-menu-title">
+    <span class="sheet-grip" aria-hidden="true"></span>
+    <h2 id="row-menu-title">Channel</h2>
+    <div class="menu-list">
+      <button id="row-rename" class="menu-item" type="button">
+        <span class="menu-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 20h4l10-10-4-4L4 16v4Z"/><path d="m14.5 5.5 4 4"/></svg>
+        </span>
+        <span>Rename</span>
+      </button>
+      <button id="row-delete" class="menu-item danger" type="button">
+        <span class="menu-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4.5h4V7m-8 0 1 13h10l1-13"/></svg>
+        </span>
+        <span>Delete channel</span>
+      </button>
+    </div>
+    <div class="sheet-actions">
+      <button id="row-cancel" class="wide ghost" type="button">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================== SCANNER =========================== -->
+<div id="scanner" class="sheet" hidden>
+  <div class="sheet-card" role="dialog" aria-modal="true" aria-label="Scan pairing code">
+    <span class="sheet-grip" aria-hidden="true"></span>
+    <h2>Scan pairing code</h2>
+    <div class="scan-frame">
+      <video id="scan-video" class="scan-video" playsinline autoplay muted></video>
+      <span class="scan-reticle" aria-hidden="true"></span>
+    </div>
+    <p class="hint" id="scan-hint">Hold the monitor's code in frame.</p>
+    <div class="sheet-actions">
+      <button id="scan-paste" class="wide ghost" type="button">Paste link instead</button>
+      <button id="scan-close" class="wide ghost" type="button">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="dimmer" class="dimmer" hidden>
+  <div id="dim-meter" class="meter big"></div>
+  <p class="dim-label">On air — tap to wake the screen</p>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="i18n.js"></script>
+<!-- QR decoder for the in-browser scanner. Bundled (no CDN). Used only when the
+     native BarcodeDetector API is missing — i.e. desktop Chromium/Brave/Firefox. -->
+<script src="vendor/jsqr.js"></script>
+<script src="app.js" type="module"></script>
+</body>
+</html>

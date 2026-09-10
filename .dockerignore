@@ -1,0 +1,12 @@
+# Build context is this repo, but the Dockerfile only COPYs app/… . Keep the
+# context small: exclude everything, then re-include the vendored payload.
+*
+!app
+
+# ...minus build-time-only / junk inside it.
+app/**/node_modules
+app/rendezvous/.wrangler
+app/rendezvous/deno
+app/public/sounds/_src
+app/**/.DS_Store
+app/.source-commit

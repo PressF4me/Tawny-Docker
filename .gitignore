@@ -1,0 +1,10 @@
+# Secrets — the Tailscale auth key lives here; it is never committed.
+.env
+*.local
+
+# Vendored payload build artifacts (app/ itself IS tracked — it's the source
+# the image builds from — but not these).
+**/node_modules/
+app/rendezvous/.wrangler/
+
+**/.DS_Store

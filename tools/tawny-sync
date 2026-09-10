@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Refresh app/ — the vendored server payload the image is built from — from the
+# Tawny Android checkout, which is the source of truth for it.
+#
+# Run this after pulling server-side changes (server.js, public/, rendezvous/,
+# docker/, package*.json) into Tawny Android, then rebuild / re-probe / tag.
+#
+#   bash tools/tawny-sync                 # default source: ../Tawny Android
+#   TAWNY_ANDROID=/path/to/repo bash tools/tawny-sync
+set -euo pipefail
+
+here="$(cd "$(dirname "$0")/.." && pwd)"
+src="${TAWNY_ANDROID:-$here/../Tawny Android}"
+
+if [ ! -d "$src/.git" ]; then
+	echo "tawny-sync: no git repo at '$src' — set TAWNY_ANDROID to the Tawny Android checkout" >&2
+	exit 1
+fi
+
+paths=(server.js public rendezvous docker package.json package-lock.json)
+ref="${1:-HEAD}"
+
+echo "==> syncing app/ from $src @ $(git -C "$src" rev-parse --short "$ref") (${paths[*]})"
+rm -rf "$here/app"
+mkdir -p "$here/app"
+git -C "$src" archive "$ref" -- "${paths[@]}" | tar -x -C "$here/app"
+
+# Record provenance so a built image can be traced to a server commit.
+git -C "$src" rev-parse HEAD > "$here/app/.source-commit"
+echo "==> app/ now at $(cat "$here/app/.source-commit")"
+git -C "$here" status --short app 2>/dev/null || true

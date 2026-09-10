@@ -1,0 +1,2313 @@
+/* Tawny — Pet Monitor. Warm parchment-and-ink, warm saffron, a touch of
+   Tawny-green. Fonts are bundled (assets/web/fonts): the station runs offline. */
+
+@font-face {
+  font-family: "Tawny Display";
+  src: url("fonts/MaShanZheng.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Tawny Text";
+  src: url("fonts/Mukta-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Tawny Text";
+  src: url("fonts/Mukta-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+
+:root {
+  /* LIGHT — "strawberry cheesecake" (names are roles, not literal hues) */
+  --bg:      #fbf4f1;   /* cheesecake cream */
+  --panel:   #ffffff;
+  --raise:   #f2ecf1;
+  --line:    #e6dad3;
+  --fg:      #33323d;   /* primary text — near-black warm charcoal */
+  --dim:     #5a5364;   /* secondary text — AA+ on cream */
+  --berry:   #d24b6d;   /* strawberry — primary accent */
+  --berry-d: #a83c58;
+  --sky:     #5b93b8;   /* secondary accent */
+  --sky-d:   #41708f;   /* ...and its deeper fill, the --berry-d of the sky */
+  --live:    #d8452f;
+  --stage:   #0c0d12;   /* live-video ground — always dark */
+  --blush:   #fdecef;   /* faint top-of-page glow (light only) */
+  --on-accent: #ffffff;  /* text on a --berry fill */
+  /* An accent used as TEXT, not as a fill. --berry on white is 4.0:1 and
+     --live is 3.9:1 — both under AA for the 11-13px labels, tags and links the
+     setup flow is full of, and both are the exact sizes where it shows. These
+     are the same hue carried to a contrast-safe lightness, and they flip with
+     the theme so a dark panel keeps the brighter one. Fills keep --berry /
+     --live: contrast there is the job of --on-accent. */
+  --accent-ink: var(--berry-d);
+  --live-ink:   #b23a22;
+  --on-alert:   #3b2a06;  /* text on an --alert fill; amber wants dark ink in both themes */
+
+  --display: "Tawny Display", "Herculanum", "Papyrus", fantasy;
+  --text: "Tawny Text", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+          Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* Corner scale — the same three tiers the native screens use (CARD 16dp /
+     CONTROL 11dp / CHIP 7dp), so a Kotlin screen and a WebView screen round
+     their corners by the same rule. */
+  --r-card: 16px;   /* panels that hold other things: the SAS card, the note */
+  --r-ctl:  11px;   /* things you press: control keys, chime keys, PiP */
+  --r-chip:  7px;   /* things you only read: rail chips, tags */
+
+  /* On-video overlay palette. The live view is the one place the theme does
+     NOT decide the colours: these sit on top of an arbitrary camera frame and
+     have to stay readable over a white wall and a black corridor alike, so
+     they are dark in both palettes. They are, at least, *warm* dark now — the
+     same 23/19/15 ground the rest of Tawny is built on, not a blue-grey. */
+  --glass:      rgba(23, 19, 15, .68);   /* chip ground */
+  --glass-deep: rgba(19, 15, 12, .90);   /* card ground — a safety code on it */
+  --glass-line: rgba(255, 246, 236, .18);
+  --glass-fg:   #f7f1e8;                 /* warm near-white */
+  --glass-dim:  #d6c9b8;
+  --glass-blur: blur(8px) saturate(1.15);
+  --alert:      #e0a63c;                 /* "paused" amber — matches .dot.warn */
+  /* The accents again, lifted towards white so they clear the dark overlay
+     ground. Substitution is lazy, so the dark palette's brass and sage flow
+     through these without a second definition. */
+  --berry-lit: color-mix(in srgb, var(--berry) 76%, #ffffff);
+  --sky-lit:   color-mix(in srgb, var(--sky)   76%, #ffffff);
+
+  --pad: clamp(16px, 4vw, 32px);
+  /* The Android shell runs the live view edge-to-edge under the status and
+     navigation bars, but a WebView inside an app does not report
+     env(safe-area-inset-*) — so the shell measures the real window insets and
+     sets these two properties on <html>. env() stays as the fallback for the
+     browser build. */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  /* hairline around the live-view control keys; sits on --panel */
+  --ctl-line: #e6dad3;
+}
+
+/* DARK — "brushed leather", neutral warm-bronze accent (never pink).
+   Applied when the OS is dark AND the user hasn't forced light, or when the
+   user explicitly picks dark. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:      #191410;
+    --panel:   #241d16;
+    --raise:   #2f261c;
+    --line:    #4a3b2b;
+    --fg:      #efe5d5;
+    --dim:     #a99a85;
+    --berry:   #c79b64;   /* aged brass / tan — the primary accent in dark mode */
+    --berry-d: #a67f4c;
+    --sky:     #a6b489;   /* muted sage */
+    --sky-d:   #8a9770;
+    --live:    #db5a4a;
+    --on-accent: #191410;
+    --blush:   transparent;
+    --ctl-line: #4a3b2b;
+    /* On a dark panel the *bright* end of each accent is the readable one, so
+       the light palette's relationship inverts here. See :root. */
+    --accent-ink: var(--berry);
+    --live-ink:   var(--live);
+  }
+}
+:root[data-theme="dark"] {
+  --bg:      #191410;
+  --panel:   #241d16;
+  --raise:   #2f261c;
+  --line:    #4a3b2b;
+  --fg:      #efe5d5;
+  --dim:     #a99a85;
+  --berry:   #c79b64;
+  --berry-d: #a67f4c;
+  --sky:     #a6b489;
+  --sky-d:   #8a9770;
+  --live:    #db5a4a;
+  --on-accent: #191410;
+  --blush:   transparent;
+  --ctl-line: #4a3b2b;
+  --accent-ink: var(--berry);
+  --live-ink:   var(--live);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--text);
+  font-size: 17px;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+}
+
+body {
+  background-image:
+    radial-gradient(130% 90% at 50% -20%, var(--blush) 0%, transparent 55%);
+}
+
+.screen { min-height: 100%; }
+[hidden] { display: none !important; }
+
+button { font: inherit; color: inherit; cursor: pointer; }
+
+:focus-visible {
+  outline: 2px solid var(--berry);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------ setup */
+
+.brand { display: flex; align-items: center; gap: 14px; }
+
+.brand .mark { width: 40px; height: 40px; fill: var(--berry); flex: none; }
+
+.brand h1 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 38px;
+  font-weight: 400;
+  letter-spacing: .03em;
+  line-height: 1.1;
+}
+
+.brand .sub { margin: 3px 0 0; color: var(--dim); font-size: 13.5px; letter-spacing: .04em; }
+
+.field { display: block; }
+
+.field > span {
+  display: block;
+  font-size: 11px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 8px;
+}
+
+.field input {
+  width: 100%;
+  min-height: 50px;
+  padding: 13px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-ctl);
+  color: var(--fg);
+  font: inherit;
+  letter-spacing: .04em;
+}
+
+.field input:focus {
+  border-color: var(--berry);
+  outline: 2px solid color-mix(in srgb, var(--berry) 30%, transparent);
+  outline-offset: 1px;
+}
+
+.field small {
+  display: block;
+  margin-top: 7px;
+  color: var(--dim);
+  font-size: 11.5px;
+}
+
+/* 12dp between cards, 18dp inside one — roleCard()'s own numbers. */
+.roles { display: grid; gap: 12px; }
+
+.role-card {
+  /* Each card carries its own accent, the way the native role screen gives
+     the Monitor berry and the Viewer sky. The inline SVG glyphs fill from
+     this too, so nothing has to be re-coloured per card. */
+  --acc: var(--berry);
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  text-align: left;
+  padding: 18px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  -webkit-tap-highlight-color: transparent;
+  transition: background .16s ease, border-color .16s ease,
+              transform .13s cubic-bezier(.2, .8, .3, 1);
+}
+.role-card > .role-emoji,
+.role-card > .role-tag,
+.role-card > strong,
+.role-card > em { grid-column: 1; }
+
+/* The Viewer takes the secondary hue, mirroring the native role screen. */
+#pick-viewer, #setup-handheld { --acc: var(--sky); }
+
+.role-card:hover, .role-card:focus-visible {
+  background: color-mix(in srgb, var(--acc) 7%, var(--panel));
+  border-color: var(--acc);
+}
+/* A firm, quick dip — the CSS twin of pressable()'s ripple. */
+.role-card:active {
+  transform: scale(.975);
+  background: color-mix(in srgb, var(--acc) 13%, var(--panel));
+  border-color: var(--acc);
+}
+
+.role-tag {
+  font-size: 13px;                /* Type.LABEL */
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--acc);
+}
+
+.role-card strong { font-size: 20px; font-weight: 600; }   /* Type.CARD_TITLE */
+
+.role-card em {
+  font-style: normal;
+  color: var(--dim);
+  font-size: 15px;                /* Type.SUB */
+  line-height: 1.45;
+}
+
+.note {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--live) 35%, var(--line));
+  border-radius: var(--r-chip);
+  background: color-mix(in srgb, var(--live) 12%, var(--panel));
+  color: var(--fg);
+  font-size: 12.5px;
+}
+
+.fine { color: var(--dim); font-size: 11.5px; margin: 0; }
+
+/* Running-text links in the fine print. It used to be the only anchor in the
+   app, so it had no styling at all and rendered as default browser
+   blue-and-underline in the middle of a warm palette. The tip buttons below
+   are anchors too, and are styled as buttons instead — hence the :not(). */
+.fine a:not(.tip) {
+  color: var(--berry);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* --------------------------------------------------------- tip buttons
+ *
+ * Ko-fi and Lightning, drawn locally.
+ *
+ * NOT the official Ko-fi widget. That is a remote <script> from
+ * storage.ko-fi.com plus an inline `kofiwidget2.init(...)` call, and this page
+ * ships inside the WebView that also owns the TawnyNative JS bridge under
+ * `default-src 'none'; script-src 'self'` (see SECURITY.md, "WebView
+ * hardening"). Dropping it in means allowing a third-party origin AND
+ * 'unsafe-inline' in the one document where a script injection reaches native
+ * code — an actual security regression, traded for a button. So: two anchors,
+ * an inline SVG mark each, and our own palette.
+ *
+ * If someone later builds a real hosted marketing page, outside the app and
+ * outside this CSP, the official widget's parameters are:
+ *   brand blue #72a4f2, widget/page id A6N425ZWFE, script Widget_2.js.
+ * Do not bring any of that back in here.
+ *
+ * The motion is the native app's, ported: the fill sweeps left-to-right from a
+ * scaleX(0) origin and a second label is revealed under it in lockstep — the
+ * CSS twin of MainActivity's WipeLabel, down to sizing the label box to the
+ * wider of the two strings so nothing reflows. On press each mark then plays
+ * its own character, exactly as IconView does: the Ko-fi heart double-thumps
+ * (beat()), the bolt takes one hard zap with a bloom behind it (strike()).
+ * The global [data-motion="off"] block collapses all of it.
+ */
+
+.tips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.tip {
+  --tip: var(--berry);
+  --tip-deep: var(--berry-d);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 15px;
+  border: 1px solid var(--tip);
+  border-radius: 11px;   /* the app's CONTROL radius */
+  color: var(--tip-deep);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tip-bolt { --tip: var(--sky); --tip-deep: var(--sky-d); }
+
+/* The wipe. Covers the resting label; the revealed one rides on top of it. */
+.tip::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: var(--tip-deep);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform .3s cubic-bezier(.15, .75, .3, 1);
+}
+
+.tip:hover::before,
+.tip:focus-visible::before,
+.tip:active::before { transform: scaleX(1); }
+
+.tip-mark {
+  position: relative;
+  z-index: 2;          /* the mark stays legible on top of the fill */
+  display: inline-flex;
+  width: 17px;
+  height: 17px;
+  transition: color .14s ease-out;
+}
+
+.tip-mark svg { width: 100%; height: 100%; fill: currentColor; }
+
+.tip:hover .tip-mark,
+.tip:focus-visible .tip-mark,
+.tip:active .tip-mark { color: var(--on-accent); }
+
+/* Both strings share one grid cell, so the button is sized by the wider of
+   them and the swap never moves anything. */
+.tip-label {
+  position: relative;
+  display: inline-grid;
+  white-space: nowrap;
+}
+
+.tip-base, .tip-alt { grid-area: 1 / 1; }
+.tip-base { position: relative; z-index: 0; }
+
+.tip-alt {
+  position: relative;
+  z-index: 2;
+  color: var(--on-accent);
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path .3s cubic-bezier(.15, .75, .3, 1);
+}
+
+.tip:hover .tip-alt,
+.tip:focus-visible .tip-alt,
+.tip:active .tip-alt { clip-path: inset(0 0 0 0); }
+
+.tip:focus-visible { outline: 2px solid var(--tip); outline-offset: 2px; }
+
+/* The press. One shot each, in character — see IconView.beat / IconView.strike. */
+@keyframes tip-beat {
+  0%   { transform: scale(1); }
+  22%  { transform: scale(1.28); }
+  45%  { transform: scale(1.03); }
+  68%  { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+@keyframes tip-zap {
+  0%   { transform: translateX(0);      opacity: 1; }
+  7%   { transform: translateX(1.7px);  opacity: .3; }
+  18%  { transform: translateX(-1.5px); opacity: .55; }
+  30%  { transform: translateX(1px);    opacity: .76; }
+  42%  { transform: translateX(0);      opacity: .9; }
+  100% { transform: translateX(0);      opacity: 1; }
+}
+
+/* ...and the bloom the bolt leaves behind it. */
+.tip-mark::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  /* the lighter accent over the deeper fill, so it blooms bright in both
+     palettes — currentColor would go near-black under the dark theme */
+  background: var(--tip);
+  opacity: 0;
+  pointer-events: none;
+}
+
+@keyframes tip-bloom {
+  0%   { transform: scale(.55); opacity: .45; }
+  100% { transform: scale(2);   opacity: 0; }
+}
+
+.tip-kofi:active .tip-mark svg { animation: tip-beat .52s linear; }
+.tip-bolt:active .tip-mark svg { animation: tip-zap .38s linear; }
+.tip-bolt:active .tip-mark::after { animation: tip-bloom .38s ease-out; }
+
+/* ------------------------------------------------------------- live */
+
+#live {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: var(--stage);
+  overflow: hidden;
+}
+
+#remote {
+  width: 100%;
+  height: 100%;
+  /* Always the whole frame, every orientation — turning to landscape is when
+     you want to see all of the room, not have its top cropped to lose a bar.
+     app.js matches the capture shape to how the sending phone is held, which is
+     what keeps the bars small (or gone, when both ends face the same way). */
+  object-fit: contain;
+  background: var(--stage);
+  display: block;
+}
+
+#local {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: 27vw;
+  max-width: 150px;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-ctl);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .38);
+  background: #000;
+  transform: scaleX(-1);
+}
+
+/* ---- which way up the picture is -------------------------------------------
+   The camera hands the page frames turned to the *window*, and the window is
+   not always the phone: with auto-rotate off a Monitor lying on its side keeps
+   a portrait window, so the room arrives on its side. app.js works out the
+   difference (see the orientation section) and sets --rot here; the Monitor's
+   own preview and every Viewer's stage carry the same turn.
+
+   A quarter turn also swaps the box. `object-fit: contain` fits the picture
+   into the box it is given and the rotation happens after, so a stage-shaped
+   box turned 90° lands a picture wider than the stage and `overflow: hidden`
+   crops it — the one thing this app never does. --rot-w / --rot-h are the
+   stage's dimensions transposed, so the fit is computed against the space the
+   picture will actually occupy. */
+#remote.rot,
+#local.fill.rot { transform: rotate(var(--rot, 0deg)); }
+
+#remote.rot-q,
+#local.fill.rot-q {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  width: var(--rot-w, 100%);
+  height: var(--rot-h, 100%);
+  transform: translate(-50%, -50%) rotate(var(--rot, 0deg));
+}
+
+/* The Watcher's own camera, shown full-frame so it can be aimed. */
+#local.fill {
+  inset: 0;
+  right: auto;
+  bottom: auto;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  aspect-ratio: auto;
+  object-fit: contain;
+  border: 0;
+  border-radius: 0;
+  background: var(--stage);
+  transform: none;
+}
+
+/* connecting: an idle carrier meter, same language as the live sound meter,
+   sat inside a warm lantern glow so a dark room still shows something happening.
+   Only transform and opacity move — the old keyframe animated `background`
+   between two solids, which is a repaint on every frame of the loop. */
+.loader {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  pointer-events: none;
+}
+
+.loader::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;               /* centres it without spending the transform */
+  width: 176px;
+  height: 176px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side,
+    color-mix(in srgb, var(--berry) 30%, transparent), transparent);
+  animation: lantern 2.8s ease-in-out infinite;
+}
+
+.loader i {
+  position: relative;
+  width: 6px;
+  height: 42px;
+  border-radius: 99px;
+  background: linear-gradient(180deg, var(--berry), var(--berry-d));
+  transform-origin: 50% 50%;
+  animation: carrier 1.4s ease-in-out infinite;
+}
+.loader i:nth-child(2) { animation-delay: .14s; }
+.loader i:nth-child(3) { animation-delay: .28s; }
+.loader i:nth-child(4) { animation-delay: .42s; }
+.loader i:nth-child(5) { animation-delay: .56s; }
+
+@keyframes carrier {
+  0%, 100% { transform: scaleY(.26); opacity: .45; }
+  50%      { transform: scaleY(1);   opacity: 1; }
+}
+
+@keyframes lantern {
+  0%, 100% { transform: scale(.86); opacity: .5; }
+  50%      { transform: scale(1.1); opacity: .95; }
+}
+
+.spinner { display: flex; gap: 6px; }
+
+.spinner i {
+  width: 6px; height: 22px;
+  background: var(--berry-d);
+  animation: pump 1.1s ease-in-out infinite;
+}
+.spinner i:nth-child(2) { animation-delay: .16s; }
+.spinner i:nth-child(3) { animation-delay: .32s; }
+
+@keyframes pump {
+  0%, 100% { transform: scaleY(.35); background: var(--berry-d); }
+  50%      { transform: scaleY(1);   background: var(--berry); }
+}
+
+/* top rail */
+
+.rail {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  display: flex;
+  align-items: center;
+  /* One line, always. The old rail wrapped to two rows of ALLCAPS chips on a
+     portrait phone - that was the "all over the place". Everything here is now
+     a glyph or a short word, so it fits. */
+  flex-wrap: nowrap;
+  gap: 0 7px;
+  padding: calc(9px + var(--safe-t)) 12px 10px;
+  overflow: hidden;              /* a long label ellipsises, never spills the edge */
+  /* a light warm wash, gone well before the middle of the picture */
+  background: linear-gradient(rgba(10, 8, 5, .42), transparent 74%);
+  text-transform: uppercase;
+  /* nothing in the rail is tappable - never let it eat a touch meant for the
+     video (pinch-zoom lives up here too) */
+  pointer-events: none;
+  transition: opacity .45s ease;
+}
+/* After a few quiet seconds the rail steps back to a whisper; any real change
+   (a phone joins, the monitor pauses) snaps it back to full via bumpRail(). */
+.rail.rail-rest { opacity: .3; }
+
+/* ...except the pet's own name, which is a proper noun the user typed.
+   "Mochi monitor" was rendering as MOCHI MONITOR. */
+.rail #channel { text-transform: none; }
+
+.rail-left, .rail-right {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  font-family: var(--text);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: .12em;
+}
+
+/* The status is the one glass chip up here — dot + a short word. Everything on
+   the right (count, device name, room) is its own bare little tag, so the rail
+   is a row of small marks, not a box stuffed inside a box. */
+.rail-left {
+  flex: none;
+  max-width: 60%;
+  gap: 6px;
+  padding: 5px 9px;
+  color: var(--glass-fg);
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-chip);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+.rail-left span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rail .meter { flex: none; }
+.rail-right { flex: 0 1 auto; margin-left: auto; gap: 6px; color: var(--glass-dim); }
+.rail-right #channel {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 30vw;
+  padding: 3px 7px;
+  border-radius: calc(var(--r-chip) - 2px);
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+/* Portrait: a nominal status is just the coloured dot - no word. Anything the
+   user might need to act on (paused, reconnecting, offline) keeps its text. */
+@media (orientation: portrait) {
+  .rail.rail-ok .rail-left { padding: 6px; gap: 0; }
+  .rail.rail-ok .rail-left #statusline { display: none; }
+}
+#live[data-role="station"] .rail #channel { display: none; }
+
+/* Watcher rail, right side: how many phones are watching (glyph + number), and
+   - when it is exactly one - that phone's own short name in place of a safety
+   code nobody needs to keep reading. Each borrows its own accent so it does not
+   read as a cream box on video. */
+#peercount, #peerlabel, #battchip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: calc(var(--r-chip) - 2px);
+  border: 1px solid transparent;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+#peercount {
+  color: var(--berry-lit);
+  border-color: color-mix(in srgb, var(--berry) 52%, transparent);
+  background: color-mix(in srgb, var(--berry) 16%, transparent);
+  letter-spacing: .06em;
+}
+#peercount svg {
+  width: 11px; height: 11px;
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round;
+}
+#peercount b { font-weight: 700; font-size: 10.5px; }
+#peercount.is-busy {
+  color: color-mix(in srgb, var(--live) 76%, #ffffff);
+  border-color: color-mix(in srgb, var(--live) 60%, transparent);
+  background: color-mix(in srgb, var(--live) 18%, transparent);
+}
+#peerlabel {
+  color: var(--glass-fg);
+  border-color: var(--glass-line);
+  background: color-mix(in srgb, #ffffff 8%, transparent);
+  text-transform: none;          /* "iPhone", "Galaxy A50" — real names, not shouting */
+  letter-spacing: .01em;
+  max-width: 38vw;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Handheld: the Monitor's battery. Neutral while it runs on its own; green with
+   a bolt when it is on power; amber when it is getting low unplugged. */
+#battchip {
+  color: var(--glass-fg);
+  border-color: var(--glass-line);
+  background: color-mix(in srgb, #ffffff 8%, transparent);
+  letter-spacing: .02em;
+  gap: 3px;
+}
+#battchip .batt-ico { width: 22px; height: 10px; flex: none; }
+#battchip .batt-fill { transition: width .35s ease; }
+#battchip .batt-bolt { display: none; width: 9px; height: 9px; margin: 0 -2px; flex: none; }
+#battchip .batt-pct { font-weight: 700; font-size: 10px; }
+#battchip.is-charging {
+  color: color-mix(in srgb, var(--live) 82%, #ffffff);
+  border-color: color-mix(in srgb, var(--live) 52%, transparent);
+  background: color-mix(in srgb, var(--live) 15%, transparent);
+}
+#battchip.is-charging .batt-bolt { display: inline-block; }
+#battchip.is-low {
+  color: color-mix(in srgb, var(--alert) 85%, #ffffff);
+  border-color: color-mix(in srgb, var(--alert) 52%, transparent);
+  background: color-mix(in srgb, var(--alert) 15%, transparent);
+}
+
+#peer-audio { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* first-call safety-code confirmation (short authentication string) */
+.sas {
+  position: absolute;
+  left: 50%; bottom: calc(16px + var(--safe-b));
+  transform: translateX(-50%);
+  width: min(88vw, 360px);
+  /* over the video — stays dark, but the app's warm dark, not a blue-grey.
+     The ground is the most opaque of the overlays on purpose: this is the one
+     card whose text a user is asked to compare character by character. */
+  background: var(--glass-deep);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-card);
+  backdrop-filter: blur(12px) saturate(1.1);
+  -webkit-backdrop-filter: blur(12px) saturate(1.1);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .42);
+  padding: 18px;
+  text-align: center;
+  color: var(--glass-fg);
+  animation: overlay-in .26s cubic-bezier(.2, .8, .3, 1);
+}
+.sas p { margin: 0 0 10px; font-size: 14px; color: var(--glass-dim); }
+.sas-code {
+  display: block;
+  font-family: var(--text);
+  font-size: 32px;
+  letter-spacing: .18em;
+  color: var(--sky-lit);
+  margin-bottom: 14px;
+}
+.sas-actions { display: flex; gap: 9px; }
+
+/* The two buttons are the shared .wide, which is drawn for a cream card. On
+   this one the ghost half has to come from the overlay palette or it turns
+   into a pale hairline box on a dark ground. */
+.sas .wide {
+  border-radius: var(--r-ctl);
+  transition: transform .16s cubic-bezier(.2, .8, .3, 1), filter .12s ease;
+}
+.sas .wide.ghost {
+  background: color-mix(in srgb, #ffffff 7%, transparent);
+  border-color: var(--glass-line);
+  color: var(--glass-fg);
+}
+.sas .wide:active { transform: scale(.965); }
+.sas .wide.ghost:hover { border-color: var(--live); color: var(--live); }
+
+/* One shot, and it ends on the resting state so the reduced-motion collapse
+   below lands somewhere sensible. */
+@keyframes overlay-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px) scale(.97); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0)   scale(1); }
+}
+
+/* The generic `.warn` rule below has the same specificity and wins on source
+   order, so it used to replace the card's dark background while leaving
+   `.sas`'s near-white text alone — an invisible warning in the one state this
+   card exists for. Scoped modifier instead. */
+.sas--warn {
+  border-color: var(--live);
+  box-shadow: 0 0 0 1px var(--live), 0 14px 34px rgba(0, 0, 0, .42);
+}
+.sas--warn .sas-code { color: color-mix(in srgb, var(--live) 55%, #ffffff); }
+.sas-actions .wide { flex: 1; margin: 0; }
+
+.dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--dim);
+  flex: none;
+}
+.dot.on   { background: var(--berry);
+            box-shadow: 0 0 10px color-mix(in srgb, var(--berry) 70%, transparent); }
+.dot.live { background: var(--live);
+            box-shadow: 0 0 10px color-mix(in srgb, var(--live) 70%, transparent);
+            animation: breathe 2s ease-in-out infinite; }
+/* capture paused: steady amber, deliberately not the breathing "live" dot */
+.dot.warn { background: var(--alert);
+            box-shadow: 0 0 10px color-mix(in srgb, var(--alert) 70%, transparent); }
+
+/* The one centred message over the video: a paused monitor, or a connection
+   that never came up. A frozen picture must never be mistaken for a live one. */
+.stage-note {
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(84vw, 340px);
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 17px 19px;
+  border-radius: var(--r-card);
+  background: var(--glass-deep);
+  border: 1px solid color-mix(in srgb, var(--alert) 55%, transparent);
+  backdrop-filter: blur(10px) saturate(1.1);
+  -webkit-backdrop-filter: blur(10px) saturate(1.1);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, .4);
+  color: var(--glass-fg);
+  text-align: center;
+  animation: note-in .3s cubic-bezier(.2, .8, .3, 1);
+}
+.stage-note strong { font-size: 15px; color: var(--alert); }
+.stage-note span { font-size: 13px; line-height: 1.5; color: var(--glass-dim); }
+
+@keyframes note-in {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 7px)) scale(.97); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@keyframes breathe { 50% { opacity: .35; } }
+
+/* signature element: carrier meter */
+
+.meter { display: flex; gap: 3px; align-items: flex-end; height: 14px; }
+
+/* Unlit bars used to be a bright cool grey and lit ones the accent, which in
+   the dark palette made the *quiet* bars the loud ones. Now level reads twice:
+   colour and height, and the height is a scaleY so it stays on the compositor
+   while the meter repaints every frame. */
+.meter i {
+  width: 3px;
+  height: 100%;
+  border-radius: 99px;
+  background: rgba(247, 241, 232, .24);
+  transform: scaleY(.42);
+  transform-origin: 50% 100%;
+  transition: background .06s linear, transform .06s linear;
+}
+.meter i.lit  { background: var(--berry-lit); transform: scaleY(1); }
+.meter i.peak { background: var(--live);      transform: scaleY(1); }
+
+.meter.big { height: 46px; gap: 6px; }
+.meter.big i { width: 6px; }
+
+/* "Listening to you" is a status, so it now hangs off the status rail instead
+   of the bottom edge. At the bottom it shared a centre line with the lens
+   selector and sat underneath the chime tray — the two overlays you are most
+   likely to have open at the exact moment you are holding the talk key. */
+.talkflag {
+  position: absolute;
+  left: 50%;
+  top: calc(92px + var(--safe-t));   /* clears a rail that has wrapped to two rows */
+  transform: translateX(-50%);
+  padding: 8px 15px;
+  background: var(--live);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  border-radius: var(--r-chip);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--live) 40%, transparent);
+  animation: flag-in .24s cubic-bezier(.2, .8, .3, 1);
+}
+
+@keyframes flag-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-9px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* controls */
+
+/* Five keys, not five table cells. The hairline dividers were the loudest
+   square thing on the screen; the icons now sit on their own rounded plate and
+   the rule between them is gone. --ctl-line survives as that plate's rim. */
+.controls {
+  display: flex;
+  gap: 3px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  padding: 7px 6px calc(7px + var(--safe-b));
+}
+
+.ctl {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 2px 1px 3px;
+  background: none;
+  border: 0;
+  border-radius: var(--r-ctl);
+  font-size: 11.5px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--dim);
+  -webkit-tap-highlight-color: transparent;
+  transition: color .14s ease;
+  /* every key carries its own accent; the row is not one colour repeated */
+  --acc: var(--berry);
+  --acc-d: var(--berry-d);
+}
+
+.ctl .ico {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  max-width: 58px;
+  height: 34px;
+  transition: transform .18s cubic-bezier(.2, .8, .3, 1);
+}
+
+/* the plate */
+.ctl .ico::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: var(--r-ctl);
+  background: var(--raise);
+  border: 1px solid var(--ctl-line);
+  transition: background .14s ease, border-color .14s ease;
+}
+
+/* the accent that blooms out from behind it on a press — the CSS cousin of
+   IconView's ring, and, like it, transform + opacity only */
+.ctl .ico::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  z-index: -2;
+  border-radius: calc(var(--r-ctl) + 3px);
+  background: var(--acc);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ctl .ico svg { width: 25px; height: 25px; display: block; }
+.ctl .ico .slash { display: none; }
+.ctl[aria-pressed="true"] .ico .slash { display: block; stroke: var(--live); }
+
+.ctl:hover { color: var(--fg); }
+.ctl:hover .ico::before { background: color-mix(in srgb, var(--acc) 9%, var(--raise)); }
+
+/* press: a scale-dip plus one bloom, then it settles back */
+.ctl:active { color: var(--acc-d); }
+.ctl:active .ico { transform: scale(.9); }
+.ctl:active .ico::before {
+  background: color-mix(in srgb, var(--acc) 20%, var(--panel));
+  border-color: var(--acc);
+}
+.ctl:active .ico::after { animation: ctl-bloom .44s ease-out; }
+
+@keyframes ctl-bloom {
+  0%   { transform: scale(.82); opacity: .5; }
+  100% { transform: scale(1.32); opacity: 0; }
+}
+
+/* latched on (camera sending, chime tray open, mic muted) */
+.ctl[aria-pressed="true"] { color: var(--acc-d); }
+.ctl[aria-pressed="true"] .ico::before {
+  background: color-mix(in srgb, var(--acc) 18%, var(--panel));
+  border-color: color-mix(in srgb, var(--acc) 60%, var(--ctl-line));
+}
+
+/* hang up / end call: the app's own warm red, and it wears it at rest so the
+   thumb can find it without reading */
+.ctl.danger { --acc: var(--live); --acc-d: var(--live); }
+.ctl.danger .ico { color: var(--live); }
+.ctl.danger .ico::before {
+  background: color-mix(in srgb, var(--live) 11%, var(--panel));
+  border-color: color-mix(in srgb, var(--live) 34%, var(--ctl-line));
+}
+.ctl.danger:hover { color: var(--live); }
+
+/* a muted mic is a warning, not a preference */
+#btn-mute[aria-pressed="true"] { --acc: var(--live); --acc-d: var(--live); }
+
+/* a clip in progress reads the same warm red as everything else that means
+   "this is live" — the halo pulses so it stays noticeable out of the corner
+   of an eye, since nothing else on this key changes size or position. */
+#btn-video[aria-pressed="true"] { --acc: var(--live); --acc-d: var(--live); }
+#btn-video[aria-pressed="true"] .ico::after {
+  background: var(--live);
+  animation: talk-halo 1.5s ease-out infinite;
+}
+
+/* The monitor's light. --alert is the one warm amber that is fixed in both
+   palettes, which is what a lit LED should read as — and it stays clear of the
+   berry/brass every other key borrows. The beam only exists while the light
+   does, the same trick #btn-mute plays with its slash. */
+#btn-torch { --acc: var(--alert); --acc-d: var(--alert); }
+.ctl .ico .beam { display: none; }
+.ctl[aria-pressed="true"] .ico .beam { display: block; }
+
+.ctl:disabled { opacity: .35; cursor: default; }
+.ctl:disabled .ico { transform: none; }
+
+/* Unavailable rather than disabled: the monitor's camera has no light, or it
+   is on its front lens. The key looks inert but still takes the tap, because
+   the tap is what surfaces the one-line reason (see updateTorchUI) — a key
+   that silently swallows the press is how a control comes to look broken. */
+.ctl.is-unavailable { opacity: .35; }
+.ctl.is-unavailable:hover { color: var(--dim); }
+.ctl.is-unavailable:hover .ico::before { background: var(--raise); }
+.ctl.is-unavailable:active .ico { transform: none; }
+.ctl.is-unavailable:active .ico::before {
+  background: var(--raise);
+  border-color: var(--ctl-line);
+}
+.ctl.is-unavailable:active .ico::after { animation: none; }
+
+@keyframes talk-halo {
+  0%   { transform: scale(.94); opacity: .55; }
+  70%  { transform: scale(1.28); opacity: 0; }
+  100% { transform: scale(1.28); opacity: 0; }
+}
+
+/* Hold-to-talk: a floating key of its own on the stage, not a sixth tile in
+   the control row. A hold gesture needs a target a thumb can't slide off —
+   the row's ~34px icons made this the one control people kept losing, and a
+   stray pointerleave off a target that small is what read as "buggy".
+   Deliberately minimal: one icon, translucent glass (the same ground
+   #lens-bar and #zoom-chip already sit in over an arbitrary camera frame,
+   so it reads in both themes without a colour of its own to get wrong).
+   Sits low, clear of the row underneath it — and of #lens-bar, nudged up to
+   bottom:104px so the two never collide when both are on screen (a
+   multi-camera monitor + a Viewer who wants to talk). Viewer only — see
+   #live[data-role] below. */
+.talk-fab {
+  display: none;
+  position: absolute;
+  left: 50%;
+  bottom: 34px;
+  transform: translateX(-50%);
+  z-index: 14;
+  width: 68px;
+  height: 68px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--glass-line);
+  background: var(--glass);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .3);
+  color: var(--glass-fg);
+  -webkit-tap-highlight-color: transparent;
+  transition: background .14s ease, border-color .14s ease, transform .1s ease;
+}
+#live[data-role="viewer"] .talk-fab { display: flex; }
+
+.talk-mic { width: 28px; height: 28px; }
+
+/* Kept for screen readers ("Hold to talk" / "Talking") — the icon plus the
+   colour change on .hot carries the state visually, so the label itself
+   stays off-screen instead of crowding a deliberately small, quiet key. */
+.talk-fab .talk-state {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.talk-fab:active { transform: translateX(-50%) scale(.94); }
+
+/* held: filled in --live, with a slow halo pulsing off the ring so the
+   microphone being open reads at a glance, not just on close inspection. */
+.talk-fab.hot {
+  background: var(--live);
+  border-color: var(--live);
+  color: #fff;
+}
+.talk-fab.hot::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  z-index: -1;
+  border-radius: 50%;
+  background: var(--live);
+  animation: talk-halo 1.5s ease-out infinite;
+}
+
+/* Five calls, not three, so this wraps into rows instead of running off the
+   side of a phone. `right` as well as `left` is what gives it a width to wrap
+   inside; without it the flex box is free to grow past the viewport. */
+.chimes {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: calc(84px + var(--safe-b));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  /* one warm tray on the video instead of five pale cards floating on it */
+  padding: 8px;
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .38);
+  animation: tray-in .22s cubic-bezier(.2, .8, .3, 1);
+}
+
+.chimes button {
+  padding: 10px 14px;
+  background: color-mix(in srgb, #ffffff 9%, transparent);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-ctl);
+  color: var(--glass-fg);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  /* Every one of these is a target for a thumb held over a pet's head. */
+  min-height: 42px;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .14s ease, border-color .14s ease, color .14s ease,
+              transform .16s cubic-bezier(.2, .8, .3, 1);
+}
+
+.chimes button:hover {
+  border-color: color-mix(in srgb, var(--berry) 65%, transparent);
+  background: color-mix(in srgb, var(--berry) 16%, transparent);
+  color: var(--berry-lit);
+}
+
+.chimes button:active {
+  transform: scale(.94);
+  background: var(--berry);
+  border-color: var(--berry);
+  color: var(--on-accent);
+}
+
+@keyframes tray-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* On a narrow phone the labels are long enough ("Psp psp psp", "Good boy") that
+   free wrapping leaves a ragged single button on the last row. Two even columns
+   read as a deliberate pad instead. */
+@media (max-width: 380px) {
+  .chimes { display: grid; grid-template-columns: 1fr 1fr; }
+  .chimes button { padding: 10px 8px; letter-spacing: .08em; }
+  .chimes button:last-child { grid-column: 1 / -1; }
+}
+
+/* dim mode */
+
+/* Dim mode. The overlay is opaque and the backlight is pinned near-black, so
+   everything under it is invisible — but it was all still costing a compositor
+   pass every frame, and the animated parts (the connecting loader, the
+   talk-back halo, the "breathe" pulse) a style recalculation on top of that.
+   Take the whole live screen out of rendering instead.
+
+   Audio is deliberately untouched: `visibility` is a rendering property and
+   does not reach the <audio> elements inside #live, so the Viewer's talk-back
+   and the chimes keep playing exactly as before. The camera is untouched too —
+   a <video> is only a sink, and the MediaStream track behind it goes on
+   feeding the encoder. */
+body.dimmed #live { visibility: hidden; }
+body.dimmed #live *,
+body.dimmed #live *::before,
+body.dimmed #live *::after {
+  animation: none !important;
+  transition: none !important;
+}
+/* The theme toggle hangs off <body>, not #live, and outranks the dimmer's
+   z-index — so it stayed lit in the corner of an otherwise black screen. On an
+   AMOLED it was very nearly the only thing still drawing power. */
+body.dimmed #theme-toggle { display: none; }
+
+.dimmer {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 22px;
+  z-index: 20;
+}
+
+/* ===== lens selector + zoom indicator ===== */
+
+#lens-bar {
+  position: absolute;
+  /* Raised clear of .talk-fab, which now sits low on the stage — see the
+     note above .talk-fab in the hold-to-talk section. */
+  bottom: 112px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12;
+  display: flex;
+  gap: 3px;
+  padding: 4px;
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  border-radius: 20px;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .3);
+  white-space: nowrap;
+}
+
+.lens-btn {
+  padding: 5px 13px;
+  background: transparent;
+  border: none;
+  border-radius: 16px;
+  color: color-mix(in srgb, var(--glass-fg) 74%, transparent);
+  font-family: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  cursor: pointer;
+  transition: background .15s, color .15s,
+              transform .16s cubic-bezier(.2, .8, .3, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+.lens-btn:hover  { color: var(--glass-fg); background: rgba(255, 246, 236, .14); }
+.lens-btn:active { transform: scale(.92); }
+.lens-btn.active { background: var(--berry); color: var(--on-accent); }
+
+#zoom-chip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 13;
+  padding: 9px 18px;
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-card);
+  color: var(--glass-fg);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  pointer-events: none;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .34);
+}
+
+.dim-label {
+  margin: 0;
+  color: #7d6f5e;    /* warm, and still nearly nothing on a black screen */
+  font-size: 10.5px;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+}
+
+/* toast */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(96px + var(--safe-b));
+  transform: translateX(-50%);
+  z-index: 30;
+  padding: 11px 18px;
+  background: var(--raise);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 12px;
+  box-shadow: 0 8px 24px -12px rgba(12, 13, 18, .35);
+  max-width: min(90vw, 420px);
+}
+
+/* The Viewer's row carries six keys now that the monitor's light is one of
+   them. On a small handset that is about 55px a key, so the labels give up a
+   little tracking rather than wrapping the row to two lines. */
+@media (max-width: 400px) {
+  .controls { gap: 2px; }
+  .ctl { font-size: 10.5px; letter-spacing: .02em; }
+  .ctl .ico { max-width: 52px; }
+}
+
+@media (min-width: 720px) {
+  .controls { gap: 6px; padding: 9px 10px calc(9px + var(--safe-b)); }
+  .ctl { font-size: 13px; padding: 3px 2px 4px; }
+  .ctl .ico { height: 40px; max-width: 72px; }
+  .ctl .ico svg { width: 28px; height: 28px; }
+  #local { width: 180px; max-width: 180px; }
+}
+
+/* Hold still.
+   Keyed off an attribute rather than off `prefers-reduced-motion` directly,
+   because two different things ask for this and only one of them is a media
+   query: the OS setting, and Tawny's own Animations switch, which a WebView
+   cannot see (it reads the media query from the system animator scale, the
+   very thing that switch is meant to be independent of). applyMotion() in
+   app.js sets the attribute for either, so the rules live in one place. */
+[data-motion="off"] *,
+[data-motion="off"] *::before,
+[data-motion="off"] *::after {
+  animation-duration: .001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: .001ms !important;
+}
+
+/* A collapsed loop stops on its last keyframe, which for the two live-view
+   loops is "almost invisible" — the connecting bars at a quarter height, the
+   talk halo at zero alpha. Park them somewhere that still reads instead. */
+[data-motion="off"] .loader i { transform: scaleY(.72); opacity: .95; }
+[data-motion="off"] .loader::before { transform: scale(1); opacity: .7; }
+[data-motion="off"] .talk-fab.hot::after { opacity: .32; transform: scale(1.06); }
+/* and no scale-dip at all, since it can no longer spring back */
+[data-motion="off"] .ctl:active .ico,
+[data-motion="off"] .talk-fab:active,
+[data-motion="off"] .chimes button:active,
+[data-motion="off"] .lens-btn:active,
+[data-motion="off"] .sas .wide:active { transform: none; }
+
+/* ------------------------------ shared primitives -----------------------
+   Sizes and presses for these are set per context: the app screens and the
+   sheets in the v4 block below, the SAS card over the video in the live
+   section above. The base is deliberately neutral so both can dress it. */
+
+.hint {
+  margin: 0;
+  color: var(--dim);
+  font-size: 15px;      /* Type.SUB */
+  line-height: 1.55;
+}
+
+.join-body { margin: 0; font-size: 16px; color: var(--dim); }
+.join-body b { color: var(--berry); }
+
+.wide {
+  width: 100%;
+  padding: 15px 16px;
+  background: var(--raise);
+  border: 1px solid var(--line);
+  border-radius: var(--r-ctl);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  transition: filter .12s ease, border-color .15s ease, color .15s ease;
+}
+.wide:hover { border-color: var(--berry); color: var(--berry); }
+.wide.primary { background: var(--berry); color: var(--on-accent); border-color: var(--berry); }
+.wide.primary:hover { filter: brightness(1.06); color: var(--on-accent); }
+.wide.ghost { background: none; font-weight: 500; }
+
+.warn {
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px solid color-mix(in srgb, var(--live) 35%, var(--line));
+  border-radius: var(--r-chip);
+  background: color-mix(in srgb, var(--live) 12%, var(--panel));
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+/* ============ v4: the pre-call screens, laid out like an app ============
+ *
+ * Everything before the video is now built the way MainActivity builds a
+ * native screen, and in the same order:
+ *
+ *   .screen.app  →  clearScreen() + a root FrameLayout: a fixed-height column
+ *   .appbar      →  backLink() + heading(), on one hairline-separated bar
+ *   .screen-body →  the ScrollView from mountCentered(): the only thing that
+ *                   scrolls, so the bar and the actions never move
+ *   .screen-foot →  primary() pinned in thumb reach, above the gesture inset
+ *
+ * The proportions are the Kotlin ones read off MainActivity: 24dp column
+ * padding, 12dp between cards, 18dp inside one, Type.TITLE 27 / CARD_TITLE 20
+ * / BODY 16 / SUB 15 / LABEL 13, and a 48dp floor under anything you can hit.
+ */
+
+/* ------------------------------------------------------------ navigation */
+
+.screen.app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  min-height: 100dvh;
+}
+
+/* While a push or a pop is playing, both screens are on screen at once, so
+   each becomes its own layer over the page ground. #live never gets here —
+   show() swaps to and from the live view instantly on purpose (app.js). */
+.screen.nav-anim {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  overflow: hidden;
+  background: var(--bg);
+  background-image:
+    radial-gradient(130% 90% at 50% -20%, var(--blush) 0%, transparent 55%);
+  will-change: transform, opacity;
+}
+.screen.nav-top { z-index: 6; }
+
+/* Forward is a push from the right; back sends the same card back out that
+   way and lets the one underneath settle in from the left. ~260ms on a firm
+   ease-out — long enough to read as movement, short enough to stay ahead of
+   the thumb. */
+@keyframes nav-push-in {
+  from { transform: translate3d(100%, 0, 0); opacity: .75; }
+  to   { transform: translate3d(0, 0, 0);    opacity: 1; }
+}
+@keyframes nav-push-out {
+  from { transform: translate3d(0, 0, 0);      opacity: 1; }
+  to   { transform: translate3d(-22%, 0, 0);   opacity: .3; }
+}
+@keyframes nav-pop-in {
+  from { transform: translate3d(-22%, 0, 0); opacity: .3; }
+  to   { transform: translate3d(0, 0, 0);    opacity: 1; }
+}
+@keyframes nav-pop-out {
+  from { transform: translate3d(0, 0, 0);    opacity: 1; }
+  to   { transform: translate3d(100%, 0, 0); opacity: .75; }
+}
+
+.screen.nav-push-in  { animation: nav-push-in  .26s cubic-bezier(.22, .9, .28, 1) both; }
+.screen.nav-push-out { animation: nav-push-out .26s cubic-bezier(.22, .9, .28, 1) both; }
+.screen.nav-pop-in   { animation: nav-pop-in   .24s cubic-bezier(.22, .9, .28, 1) both; }
+.screen.nav-pop-out  { animation: nav-pop-out  .24s cubic-bezier(.22, .9, .28, 1) both; }
+
+/* ---------------------------------------------------------------- app bar */
+
+.appbar {
+  flex: none;
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* The theme toggle is a fixed, page-level button in the same corner, so the
+     bar keeps 54px clear on the right rather than parking an action under it. */
+  padding: calc(6px + var(--safe-t)) 54px 6px 8px;
+  min-height: calc(56px + var(--safe-t));
+  background: var(--bg);
+  box-shadow: 0 1px 0 0 transparent;
+  transition: box-shadow .18s ease, background .18s ease;
+}
+/* The hairline is earned: it appears the moment the body is scrolled away
+   from the top, which is how a phone tells you the bar is floating. */
+.appbar.is-stuck {
+  background: var(--panel);
+  box-shadow: 0 1px 0 0 var(--line);
+}
+
+.appbar-titles { flex: 1; min-width: 0; }
+
+.appbar-titles h1 {
+  margin: 0;
+  font-family: var(--text);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* "Tawny" is the one string that wears the brush script. */
+.appbar-titles h1.wordmark {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 28px;
+  letter-spacing: .03em;
+}
+
+.appbar-sub {
+  margin: 1px 0 0;
+  color: var(--dim);
+  font-size: 12.5px;
+  letter-spacing: .04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.appbar-mark {
+  width: 30px; height: 30px;
+  flex: none;
+  margin-left: 6px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(12, 13, 18, .22);
+}
+
+.appbar-slot { width: 4px; flex: none; }
+
+.appbar-back,
+.appbar-action {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 50%;
+  color: var(--fg);
+  -webkit-tap-highlight-color: transparent;
+  transition: background .14s ease, color .14s ease,
+              transform .13s cubic-bezier(.2, .8, .3, 1);
+}
+.appbar-action { color: var(--berry); }
+
+.appbar-back svg,
+.appbar-action svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.appbar-back:hover, .appbar-action:hover { background: var(--raise); }
+.appbar-back:active, .appbar-action:active {
+  background: color-mix(in srgb, var(--berry) 16%, transparent);
+  color: var(--berry);
+  transform: scale(.9);
+}
+
+/* ------------------------------------------------------- body + footer */
+
+.screen-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.wrap {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px var(--pad) 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.center-text { text-align: center; align-items: center; }
+
+/* A hero screen (welcome, "code accepted") has no bar and centres its column
+   optically, the way mountCentered()'s fillViewport ScrollView does. */
+.screen.hero .screen-body { display: flex; }
+.screen.hero .screen-body > .wrap {
+  margin: auto;
+  width: 100%;
+  padding-top: calc(20px + var(--safe-t));
+  text-align: center;
+  align-items: center;
+  gap: 14px;
+}
+.screen.hero .brand { justify-content: center; }
+
+.screen-foot {
+  flex: none;
+  padding: 10px var(--pad) calc(10px + var(--safe-b));
+  background: var(--bg);
+  box-shadow: 0 -1px 0 0 transparent;
+  transition: box-shadow .18s ease;
+}
+/* Same rule as the bar: the separator only shows when there is content
+   running underneath it. */
+.screen-foot.is-lifted {
+  background: var(--panel);
+  box-shadow: 0 -1px 0 0 var(--line);
+}
+
+.screen-foot .wrap {
+  padding: 0;
+  gap: 6px;
+  max-width: 480px;
+}
+
+/* ------------------------------------------------------------- controls */
+
+/* The shared .wide is also the live view's SAS card buttons, which are drawn
+   for a dark overlay — so the app-screen sizing is scoped and never reaches
+   them. 52px tall, sentence case: the native pill is primary() with dp(18)
+   /dp(15) padding and Type.PILL, not a tracked-out all-caps web button. */
+.screen.app .wide,
+.sheet .wide {
+  min-height: 52px;
+  padding: 15px 18px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  text-transform: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .14s ease, border-color .15s ease, color .15s ease,
+              filter .12s ease, transform .13s cubic-bezier(.2, .8, .3, 1);
+}
+.screen.app .wide:active,
+.sheet .wide:active { transform: scale(.97); }
+.screen.app .wide.primary:active,
+.sheet .wide.primary:active { filter: brightness(.94); }
+.screen.app .wide:not(.primary):active,
+.sheet .wide:not(.primary):active {
+  background: color-mix(in srgb, var(--berry) 12%, var(--raise));
+  border-color: var(--berry);
+}
+
+/* The quiet second action under a primary — "I've set this up before",
+   "Set up later". A native link() row: no border, full width, 48dp tall. */
+.linkbtn {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  background: none;
+  border: 0;
+  border-radius: var(--r-ctl);
+  color: var(--dim);
+  font-size: 15px;
+  letter-spacing: .02em;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .14s ease, color .14s ease,
+              transform .13s cubic-bezier(.2, .8, .3, 1);
+}
+.linkbtn:hover { color: var(--berry); }
+.linkbtn:active {
+  background: color-mix(in srgb, var(--berry) 10%, transparent);
+  color: var(--berry);
+  transform: scale(.985);
+}
+
+.block { display: flex; flex-direction: column; gap: 12px; }
+
+.block-head { display: flex; align-items: baseline; gap: 12px; }
+
+.block-head h2 {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.hero-title {
+  margin: 0;
+  font-size: 27px;               /* Type.TITLE */
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.join-seal {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  border-radius: 20px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 26px -14px rgba(12, 13, 18, .4);
+}
+.join-mark { width: 60px; height: 60px; margin: 0; border-radius: 15px; display: block; }
+
+/* --------------------------------------------------------- channel list */
+
+.ch-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ch-row {
+  display: flex;
+  align-items: stretch;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  overflow: hidden;
+  transition: border-color .16s ease, box-shadow .16s ease,
+              transform .13s cubic-bezier(.2, .8, .3, 1);
+}
+.ch-row:hover { border-color: color-mix(in srgb, var(--berry) 55%, var(--line)); }
+/* :active matches the ancestors of the pressed button too, so the whole card
+   dips as one object — which is what a list row does on a phone. */
+.ch-row:active { transform: scale(.985); }
+
+.ch-open {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0 13px;
+  text-align: left;
+  padding: 13px 4px 13px 14px;
+  min-height: 76px;
+  background: none;
+  border: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .14s ease;
+}
+.ch-open:active { background: color-mix(in srgb, var(--berry) 9%, transparent); }
+
+.ch-avatar {
+  grid-column: 1;
+  grid-row: 1 / span 3;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-ctl);
+  background: color-mix(in srgb, var(--berry) 15%, var(--panel));
+  color: var(--berry);
+}
+.ch-avatar svg { width: 24px; height: 24px; fill: currentColor; display: block; }
+
+.ch-open strong {
+  grid-column: 2;
+  grid-row: 1;
+  font-size: 16.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The one thing this row exists to say: tapping it is how you pick a job. */
+.ch-cue {
+  grid-column: 2;
+  grid-row: 2;
+  font-size: 12.5px;
+  letter-spacing: .02em;
+  color: var(--berry);
+}
+
+.ch-fp {
+  grid-column: 2;
+  grid-row: 3;
+  font-size: 11px;
+  letter-spacing: .08em;
+  color: var(--dim);
+}
+
+.ch-chev {
+  grid-column: 3;
+  grid-row: 1 / span 3;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  color: var(--dim);
+  transition: color .15s ease, transform .13s cubic-bezier(.2, .8, .3, 1);
+}
+.ch-chev svg {
+  width: 15px; height: 15px;
+  fill: none; stroke: currentColor; stroke-width: 2.4;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.ch-row:hover .ch-chev { color: var(--berry); transform: translateX(2px); }
+
+/* One deliberate trailing control instead of two 15px glyphs. It opens the
+   #row-menu sheet — rename / pairing code / delete. */
+.ch-more {
+  flex: none;
+  width: 50px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-left: 1px solid var(--line);
+  color: var(--dim);
+  -webkit-tap-highlight-color: transparent;
+  transition: background .14s ease, color .14s ease;
+}
+.ch-more svg { width: 20px; height: 20px; fill: currentColor; display: block; }
+.ch-more:hover { background: var(--raise); color: var(--berry); }
+.ch-more:active { background: color-mix(in srgb, var(--berry) 16%, transparent); color: var(--berry); }
+
+/* ---------------------------------------------------------- empty state */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 9px;
+  padding: 10px 6px 2px;
+}
+.empty-state p { margin: 0; font-size: 17px; font-weight: 600; }
+.empty-state span {
+  max-width: 34ch;
+  color: var(--dim);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.empty-state .wide { margin-top: 8px; max-width: 280px; }
+
+/* A cat asleep on the empty list — the restrained cousin of the native
+   PlayfulSceneView that idles over the sessions home. */
+.doze { width: min(62%, 186px); height: auto; display: block; }
+.doze * { transform-box: fill-box; }
+
+.doze-shadow { fill: color-mix(in srgb, var(--fg) 9%, transparent); }
+.doze-body, .doze-head {
+  fill: color-mix(in srgb, var(--berry) 15%, var(--panel));
+  stroke: color-mix(in srgb, var(--berry) 60%, transparent);
+  stroke-width: 2.4;
+  stroke-linejoin: round;
+}
+.doze-line, .doze-tail {
+  fill: none;
+  stroke: color-mix(in srgb, var(--berry) 60%, transparent);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+.doze-tail { stroke-width: 5; }
+
+.doze-cat { transform-origin: 50% 100%; animation: doze-breathe 4.4s ease-in-out infinite; }
+.doze-tail { transform-origin: 0% 100%; animation: doze-flick 6s ease-in-out infinite; }
+
+.doze-z text {
+  fill: var(--berry);
+  font-family: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  opacity: 0;
+}
+.doze-z .z1 { animation: doze-z 3.6s ease-in-out infinite; }
+.doze-z .z2 { animation: doze-z 3.6s ease-in-out infinite .5s; }
+.doze-z .z3 { animation: doze-z 3.6s ease-in-out infinite 1s; }
+
+@keyframes doze-breathe {
+  0%, 100% { transform: scaleY(1); }
+  50%      { transform: scaleY(1.025); }
+}
+@keyframes doze-flick {
+  0%, 78%, 100% { transform: rotate(0deg); }
+  86%           { transform: rotate(-9deg); }
+  93%           { transform: rotate(4deg); }
+}
+@keyframes doze-z {
+  0%   { opacity: 0;   transform: translateY(4px) scale(.8); }
+  30%  { opacity: .55; }
+  70%  { opacity: .35; }
+  100% { opacity: 0;   transform: translateY(-8px) scale(1.05); }
+}
+/* Collapsed loops stop on their last frame, which for the z's is invisible.
+   Park them somewhere legible instead. */
+[data-motion="off"] .doze-z text { opacity: .4; transform: none; }
+
+/* --------------------------------------------------------------- sheets */
+
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: hidden;
+  background: color-mix(in srgb, #0c0d12 66%, transparent);
+  opacity: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity .22s ease;
+}
+.sheet.is-open { opacity: 1; }
+
+.sheet-card {
+  width: min(480px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 7px 20px calc(20px + var(--safe-b));
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 22px 22px 0 0;
+  box-shadow: 0 -16px 40px -20px rgba(0, 0, 0, .5);
+  transform: translate3d(0, 100%, 0);
+  transition: transform .27s cubic-bezier(.22, .9, .28, 1);
+}
+.sheet.is-open .sheet-card { transform: translate3d(0, 0, 0); }
+
+.sheet-grip {
+  flex: none;
+  align-self: center;
+  width: 38px;
+  height: 4px;
+  margin: 3px 0 3px;
+  border-radius: 99px;
+  background: var(--line);
+}
+
+.sheet-card h2 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--fg);
+}
+
+.sheet-actions { display: flex; gap: 9px; margin-top: 2px; }
+.sheet-actions .wide { flex: 1; }
+
+/* On a tablet or a desktop window a bottom sheet reads as a stranded strip,
+   so past the phone width it becomes a centred dialog again. */
+@media (min-width: 720px) {
+  .sheet { align-items: center; padding: 20px; }
+  .sheet-card {
+    border-bottom: 1px solid var(--line);
+    border-radius: var(--r-card);
+    padding-bottom: 20px;
+    transform: translate3d(0, 12px, 0) scale(.985);
+  }
+  .sheet.is-open .sheet-card { transform: none; }
+  .sheet-grip { display: none; }
+}
+
+/* the channel row's overflow menu */
+
+.menu-card { gap: 9px; }
+.menu-list { display: flex; flex-direction: column; gap: 2px; margin: 0 -8px; }
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 54px;
+  padding: 8px 12px;
+  background: none;
+  border: 0;
+  border-radius: var(--r-ctl);
+  text-align: left;
+  font-size: 16px;
+  color: var(--fg);
+  -webkit-tap-highlight-color: transparent;
+  transition: background .14s ease, transform .13s cubic-bezier(.2, .8, .3, 1);
+}
+.menu-item:hover { background: var(--raise); }
+.menu-item:active {
+  background: color-mix(in srgb, var(--berry) 13%, transparent);
+  transform: scale(.985);
+}
+.menu-item.danger { color: var(--live); }
+
+.menu-ico { flex: none; width: 24px; height: 24px; display: grid; place-items: center; color: var(--dim); }
+.menu-item.danger .menu-ico { color: var(--live); }
+.menu-ico svg {
+  width: 21px; height: 21px;
+  fill: none; stroke: currentColor; stroke-width: 1.9;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* --------------------------------------------------------- form fields */
+
+.field select {
+  width: 100%;
+  min-height: 50px;
+  padding: 12px 13px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-ctl);
+  color: var(--fg);
+  font: inherit;
+}
+
+.qr {
+  display: block;
+  width: 100%;
+  max-width: 292px;
+  height: auto;
+  margin: 0 auto;
+  padding: 14px;
+  background: #fff;
+  border-radius: var(--r-card);
+  image-rendering: pixelated;
+}
+
+.pair-url {
+  display: block;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-ctl);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--dim);
+  word-break: break-all;
+  user-select: all;
+}
+
+/* the scanner's viewfinder: a real reticle over a dimmed frame */
+
+.scan-frame {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: #000;
+}
+
+.scan-video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  background: #000;
+}
+
+.scan-reticle {
+  position: absolute;
+  inset: 15%;
+  border-radius: 16px;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--berry) 85%, transparent),
+    0 0 0 100vmax rgba(0, 0, 0, .3);
+  animation: reticle 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes reticle {
+  0%, 100% { opacity: .6; }
+  50%      { opacity: 1; }
+}
+
+/* ================= welcome hero + the two role pickers ================= */
+
+.welcome-lede {
+  margin: 0;
+  max-width: 32ch;
+  color: var(--dim);
+  font-size: 16px;                /* Type.BODY */
+  line-height: 1.45;              /* Type.LEAD_BODY */
+}
+
+/* animated cat + dog */
+
+.scene {
+  width: min(74vw, 300px);
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+.scene * { transform-box: fill-box; }
+
+.scene-cat { animation: bob 4.5s ease-in-out infinite; transform-origin: 50% 100%; }
+.scene-dog { animation: bob 3.8s ease-in-out infinite .4s; transform-origin: 50% 100%; }
+
+.scene .eye {
+  transform-origin: 50% 50%;
+  animation: blink 4s ease-in-out infinite;
+}
+.scene-dog .eye { animation-delay: 1.7s; }
+
+#cat-tail { transform-origin: 0% 100%; animation: swish 3.4s ease-in-out infinite; }
+#dog-tail { transform-origin: 100% 100%; animation: wag .8s ease-in-out infinite; }
+
+.cat-ear { transform-origin: 50% 100%; animation: twitch 5s ease-in-out infinite; }
+.cat-ear + .cat-ear { animation-delay: 2.6s; }
+
+@keyframes blink {
+  0%, 90%, 100% { transform: scaleY(1); }
+  95%           { transform: scaleY(.15); }
+}
+@keyframes swish {
+  0%, 100% { transform: rotate(-10deg); }
+  50%      { transform: rotate(14deg); }
+}
+@keyframes wag {
+  0%, 100% { transform: rotate(-17deg); }
+  50%      { transform: rotate(17deg); }
+}
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+@keyframes twitch {
+  0%, 88%, 100% { transform: rotate(0); }
+  93%           { transform: rotate(-7deg); }
+}
+
+/* the role picker */
+
+.role-card.big { padding: 18px; }
+
+.role-emoji { display: block; margin-bottom: 6px; }
+.role-emoji svg { width: 42px; height: 42px; display: block; }
+
+/* The silhouette tucked in the corner the header row leaves empty — the CSS
+   twin of CritterSilhouetteView on the native role cards. It idles: a slow
+   breath and, once in a while, a head-tilt. */
+.role-critter {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 62px;
+  height: 62px;
+  color: var(--acc);
+  opacity: .17;
+  pointer-events: none;
+  transform-origin: 60% 80%;
+  animation: critter-idle 7.5s ease-in-out infinite;
+}
+.role-critter svg { width: 100%; height: 100%; fill: currentColor; display: block; }
+#setup-handheld .role-critter, #pick-viewer .role-critter { animation-delay: 2.6s; }
+
+@keyframes critter-idle {
+  0%, 100% { transform: translateY(0)     rotate(0deg); }
+  45%      { transform: translateY(-2.5px) rotate(0deg); }
+  84%      { transform: translateY(0)     rotate(0deg); }
+  90%      { transform: translateY(0)     rotate(-5deg); }
+  96%      { transform: translateY(0)     rotate(2deg); }
+}
+
+.role-go {
+  grid-column: 2;
+  /* The card has no explicit rows, so `1 / -1` would resolve against the
+     explicit grid and collapse to a single row — span the four auto-placed
+     children of column 1 instead. */
+  grid-row: 1 / span 4;
+  align-self: center;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  color: var(--dim);
+  transition: color .15s ease, transform .13s cubic-bezier(.2, .8, .3, 1);
+}
+.role-go svg {
+  width: 15px; height: 15px;
+  fill: none; stroke: currentColor; stroke-width: 2.4;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.role-card:hover .role-go { color: var(--acc); transform: translateX(2px); }
+
+/* watcher "show this code" screen */
+
+.wp-wait {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.wp-wait .spinner i { width: 4px; height: 16px; }
+
+.wp-share {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+}
+.wp-share-label {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+/* --------------------------------------------- "pairing with the app?"
+   A disclosure, shut by default, on both screens that show a pairing link.
+   The Android app cannot open a web link, so this is where the browser hands
+   over the one thing the two builds must agree on: the relay address. Closed
+   it is a single tappable row (48px, the same target as .linkbtn); open it is
+   a hairline-boxed card in the sheet's own idiom. */
+.relay-hint {
+  border: 1px solid var(--line);
+  border-radius: var(--r-ctl);
+  background: none;      /* the nested address block is the one that gets a fill */
+  text-align: left;
+}
+
+.relay-hint > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 12px 14px;
+  border-radius: var(--r-ctl);
+  color: var(--dim);
+  font-size: 14px;
+  cursor: pointer;
+  list-style: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.relay-hint > summary::-webkit-details-marker { display: none; }
+
+/* The twisty, drawn rather than borrowed, so it turns with the disclosure. */
+.relay-hint > summary::after {
+  content: "";
+  flex: none;
+  margin-left: auto;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform .16s cubic-bezier(.2, .8, .3, 1);
+}
+.relay-hint[open] > summary::after { transform: rotate(-135deg) translate(-2px, -2px); }
+
+.relay-hint > summary:hover { color: var(--berry); }
+.relay-hint[open] > summary { color: var(--fg); }
+
+.relay-hint-body {
+  display: grid;
+  gap: 10px;
+  padding: 0 14px 14px;
+}
+
+.relay-hint-body p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--dim);
+}
+
+.relay-hint-body .pair-url { font-size: 12px; user-select: all; }
+
+/* ------------------------------------------------- hold still, part two
+   The global [data-motion="off"] block collapses every duration; these are
+   the resting states that would otherwise be collapsed to somewhere wrong,
+   plus the press dips, which cannot spring back once the transition is gone. */
+[data-motion="off"] .role-critter,
+[data-motion="off"] .sheet-card { transform: none; }
+[data-motion="off"] .role-card:active,
+[data-motion="off"] .ch-row:active,
+[data-motion="off"] .ch-chev,
+[data-motion="off"] .role-go,
+[data-motion="off"] .menu-item:active,
+[data-motion="off"] .linkbtn:active,
+[data-motion="off"] .appbar-back:active,
+[data-motion="off"] .appbar-action:active,
+[data-motion="off"] .screen.app .wide:active,
+[data-motion="off"] .sheet .wide:active { transform: none; }
+
+/* ---------------------------------------------------- theme toggle (browser) */
+:root { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { color-scheme: dark; }
+}
+
+#theme-toggle {
+  position: fixed;
+  top: calc(10px + var(--safe-t));
+  right: 12px;
+  z-index: 40;
+  width: 34px; height: 34px;
+  display: grid; place-content: center;
+  padding: 0;
+  font-size: 16px;
+  color: var(--dim);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  opacity: .92;
+}
+#theme-toggle:hover { color: var(--berry); border-color: var(--berry); }
+/* during a live session move it above the controls bar so it clears the rail */
+body:has(#live:not([hidden])) #theme-toggle {
+  top: auto;
+  bottom: calc(84px + var(--safe-b));
+}

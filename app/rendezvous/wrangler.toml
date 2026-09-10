@@ -1,0 +1,60 @@
+name = "tawny-rendezvous"
+main = "worker.js"
+compatibility_date = "2025-08-01"
+compatibility_flags = ["nodejs_compat"]
+
+# One Durable Object class = one actor per room. SQLite-backed storage is on the
+# Workers free plan.
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
+
+# Per-IP rate-limit counters. Create with:
+#   wrangler kv namespace create RL
+# then paste the id below.
+[[kv_namespaces]]
+binding = "RL"
+id = "a8cb27e35c234a54b3a15f5ea6118b76"
+
+# Diagnostic reports from the in-app "Send to Tawny" button. If this binding is
+# removed, /report just 404s and the app falls back to its share sheet — nothing
+# breaks. Also needs the REPORT_KEY secret (see below) for GET /report/pull.
+[[kv_namespaces]]
+binding = "REPORTS"
+id = "d4f70cb39ee04b8f807437e78b021320"
+
+# Atomic per-IP rate limiting. The KV counter below is a read-modify-write
+# against an eventually-consistent store, so a burst walks through it; this
+# binding is the real limit and the KV path is only a fallback.
+[[unsafe.bindings]]
+name = "LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 60, period = 60 }
+
+[vars]
+# Public STUN servers handed to clients (safe to ship). Empty = clients use
+# whatever is already baked into the app's config.json.
+STUN_URLS = "stun:stun.cloudflare.com:3478,stun:stun.l.google.com:19302"
+# "auto" = TURN only when P2P fails; "always" = force relay (higher cost).
+TURN_MODE = "auto"
+# Extra allowed WebSocket origins (comma separated). 127.0.0.1 / localhost are
+# always allowed; add your web deployment's origin here if you host one.
+ALLOWED_ORIGINS = ""
+
+# --- secrets (do NOT put these here; use `wrangler secret put NAME`) ----------
+# Read key for GET /report/pull — a long random string:
+#   wrangler secret put REPORT_KEY
+# Optional push when a report lands — an ntfy.sh topic URL or a Discord/Slack
+# webhook. Best-effort; unset = reports are just stored and pulled on demand:
+#   wrangler secret put REPORT_NOTIFY_URL
+# Preferred — Cloudflare Realtime TURN:
+#   wrangler secret put TURN_KEY_ID
+#   wrangler secret put TURN_API_TOKEN
+# Fallback — self-hosted coturn (use-auth-secret):
+#   wrangler secret put TURN_STATIC_SECRET      # matches coturn static-auth-secret
+#   set TURN_URLS in [vars] above, e.g. "turn:turn.example.net:3478,turns:turn.example.net:5349"

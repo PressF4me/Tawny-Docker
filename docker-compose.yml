@@ -1,0 +1,152 @@
+# Tawny — run your own pet monitor.
+#
+#   1. put TS_AUTHKEY in a .env file next to this one (see below)
+#   2. docker compose up -d
+#   3. open http://<this box>:8099/setup and follow it
+#
+# That is the whole setup. The container joins your tailnet and publishes the
+# app over `tailscale serve` with a real Let's Encrypt certificate — so nobody
+# imports anything and the phone is never touched. One topology, in DESIGN.md.
+#
+# Step 3 is not filler. Two things cannot be done from a compose file, and
+# /setup is where both happen: turning on the subnet route that lets you watch
+# from outside the house (off by default — see TS_ROUTES below), and approving
+# that route once in the Tailscale admin console. The page checks each step and
+# says which one is waiting on you.
+#
+# Get an auth key at https://login.tailscale.com/admin/settings/keys — Reusable,
+# and leave "Ephemeral" OFF so the node keeps its identity across restarts. Then:
+#
+#   echo 'TS_AUTHKEY=tskey-auth-xxxxxxxxxxxx' > .env
+#
+# Host networking is load-bearing, not a shortcut: the container has to see the
+# real LAN interface to know which subnet to advertise, to reach the phone's own
+# relay, and to give coturn real addresses. tailscaled runs in userspace mode so
+# this needs no NET_ADMIN and no /dev/net/tun. See docker-compose.portainer.yml
+# if host networking is not available to you.
+#
+# The image builds from this repo. The server payload under app/ is vendored
+# from the Tawny Android checkout by tools/tawny-sync — run that after pulling
+# server-side changes, then rebuild.
+
+name: tawny
+
+services:
+  tawny:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # The image installs tailscale and coturn from Alpine, so the BUILD has
+      # to reach the network. On a host whose container bridge cannot route out
+      # — a Tailscale or Mullvad nftables stack with a dropping FORWARD chain
+      # will do it — `apk add` dies with "exit code 2" or a DNS transient
+      # error, and nothing else says why. probe.sh retries with --network=host;
+      # compose has no retry, so it is pinned here.
+      #
+      # It only affects the build, never the running container, and the only
+      # cost is that the build shares the host's network namespace instead of
+      # an isolated one. Delete these two lines if your host builds fine
+      # without them.
+      network: host
+    image: tawny:local
+    container_name: tawny
+    restart: unless-stopped
+    network_mode: host
+
+    volumes:
+      # tailscale node identity (when the container runs its own tailscaled) and
+      # the generated TURN secret's home. Losing it costs a fresh auth key and a
+      # fresh route approval — nothing worse. No certificate or CA lives here;
+      # Tailscale holds the cert.
+      - tawny-data:/data
+      #
+      # The host's tailscaled socket, if it has one. Harmless when it does not:
+      # the entrypoint only uses this when TS_AUTHKEY is empty, and Docker
+      # creating an empty directory here is inert. Read-only — the CLI only
+      # needs to connect to the socket, never to write in the directory.
+      - /var/run/tailscale:/var/run/tailscale:ro
+
+    environment:
+      PORT: "8099"
+
+      # --- Tailscale -------------------------------------------------------
+      # Two ways in, and the container picks between them on its own:
+      #
+      #   Set it   — an auth key from
+      #              https://login.tailscale.com/admin/settings/keys (Reusable,
+      #              not Ephemeral). The container joins as its own node and
+      #              nothing has to be installed on the host. This is the
+      #              normal path.
+      #   Empty    — the container drives the host's existing tailscaled
+      #              through the socket mounted above, reusing that machine's
+      #              identity and any routes already approved for it. Nothing
+      #              to paste, but only works if the host is already on your
+      #              tailnet — and on that daemon Tawny only ever ADDS: it
+      #              merges its route in beside the machine's existing ones,
+      #              declines to take over an address the machine already
+      #              serves, and will not run `tailscale up` on a computer that
+      #              is not Tawny's to sign in. If any of that gets in the way,
+      #              set a key here instead and Tawny gets its own node.
+      #
+      # Empty with no host daemon means no TLS from anywhere, and a browser
+      # will not run a session without it (see DESIGN.md) — /setup still
+      # answers, and two phones still pair directly on the Wi-Fi, but the
+      # container's own address is only usable from this machine. /setup says
+      # which of the three you actually got.
+      TS_AUTHKEY: "${TS_AUTHKEY:-}"
+      # Node name in your tailnet, and the hostname in the app's URL:
+      # https://<TS_HOSTNAME>.<your-tailnet>.ts.net
+      TS_HOSTNAME: "${TS_HOSTNAME:-tawny}"
+      # Subnet advertised into the tailnet so a remote Viewer reaches the phone
+      # directly. This is what makes watching from OUTSIDE the house work.
+      #
+      #   off (default) — advertise nothing until you ask for it at /setup,
+      #                   which turns it on live and remembers the answer. It
+      #                   defaults off because a container that advertises a
+      #                   subnet the moment it starts makes a second router for
+      #                   a network that may already have one, and Tailscale
+      #                   answers that by flipping between them — which from
+      #                   inside the house looks like the internet stalling.
+      #   empty / auto  — the subnet this container is on, no questions asked
+      #   a CIDR        — exactly that
+      #
+      # /setup asks once and will not call the deployment finished until you
+      # answer, so leaving this alone does not quietly cost you remote access.
+      TS_ROUTES: "${TS_ROUTES:-off}"
+      # "off" to skip `tailscale serve`, for a deployment already behind a proxy
+      # that terminates TLS.
+      TS_SERVE: "${TS_SERVE:-on}"
+
+      # --- Everything below is optional; defaults are the intended setup ------
+      #
+      # Hostnames this server answers on. Empty = any. The exposure is DNS
+      # rebinding, and it buys an attacker little here: every route is public or
+      # gated on a pairing ticket, the WebSocket checks Origin, the LAN bridge
+      # only ever dials private space, and there are no cookies.
+      ALLOWED_HOSTS: "${TAWNY_ALLOWED_HOSTS:-}"
+      # STUN lets a peer learn its public address when the ends are not on one
+      # subnet. STUN_URLS=off for an air-gapped LAN.
+      STUN_URLS: "${TAWNY_STUN_URLS:-stun:stun.l.google.com:19302,stun:stun.cloudflare.com:3478}"
+      # Left empty, /config.json echoes back the origin each request arrived on.
+      RENDEZVOUS_URL: "${TAWNY_RENDEZVOUS_URL:-}"
+      TURN_MODE: "auto"
+      # coturn inside the image — the fallback for a network that blocks direct
+      # UDP, and for a phone that fell back to the cloud rendezvous. Secret
+      # generated per container start. TURN_EMBEDDED=off to drop it.
+      TURN_EMBEDDED: "${TAWNY_TURN_EMBEDDED:-on}"
+      TURN_PORT: "3478"
+      # Only behind a port-forward: the public IP relay candidates should carry.
+      TAWNY_PUBLIC_IP: "${TAWNY_PUBLIC_IP:-}"
+      # An external relay you already run. Overrides the embedded one.
+      TAWNY_TURN_URLS: "${TAWNY_TURN_URLS:-}"
+      TAWNY_TURN_SECRET: "${TAWNY_TURN_SECRET:-}"
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8099/healthz | grep -q '\"ok\":true'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  tawny-data:

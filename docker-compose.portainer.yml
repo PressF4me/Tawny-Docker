@@ -1,0 +1,85 @@
+# Tawny — Portainer stack.
+#
+# Portainer's web editor has no source tree, so it cannot build from
+# ../frentalk. Build the image once on the Docker host, then deploy this.
+#
+# On the host, with frentalk/ and "Tawny Docker"/ side by side:
+#
+#   cd "Tawny Docker"
+#   docker build --network=host -f Dockerfile -t tawny:local ../frentalk
+#
+# Then: Portainer -> Stacks -> Add stack -> Web editor -> paste this file, and
+# set TS_AUTHKEY in the "Environment variables" box (get one at
+# https://login.tailscale.com/admin/settings/keys — Reusable, not Ephemeral).
+#
+# Host networking is load-bearing: the container has to see the real LAN
+# interface to know which subnet to advertise into the tailnet, to reach the
+# Monitor phone's own relay, and to give coturn real addresses. If your
+# Portainer environment forbids host networking, see the bridge variant at the
+# bottom — it works, but you supply the LAN CIDR by hand (TS_ROUTES) and it
+# cannot open the phone's LAN relay for a browser, so a remote Viewer then
+# depends on the phone falling back to the cloud rendezvous + coturn.
+
+name: tawny
+
+services:
+  tawny:
+    image: tawny:local
+    container_name: tawny
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - tawny-data:/data
+      #
+      # The host's tailscaled socket, if it has one. Harmless when it does not.
+      - /var/run/tailscale:/var/run/tailscale:ro
+    environment:
+      PORT: "8099"
+      # Two ways in, picked automatically. Set an auth key from
+      # https://login.tailscale.com/admin/settings/keys (Reusable, not
+      # Ephemeral) and the container joins as its own node. Leave it empty and
+      # it drives the host's existing tailscaled through the socket above,
+      # reusing that machine's identity. Empty with no host daemon is LAN-only.
+      # /setup says which of the three you got.
+      TS_AUTHKEY: "${TS_AUTHKEY:-}"
+      TS_HOSTNAME: "${TS_HOSTNAME:-tawny}"
+      # Empty = the subnet this container is on (right under host networking).
+      # off by default: see docker-compose.yml. /setup turns it on live and
+      # remembers the answer, and will not call the deployment finished
+      # until you have answered one way or the other.
+      TS_ROUTES: "${TS_ROUTES:-off}"
+      TS_SERVE: "${TS_SERVE:-on}"
+      # All optional; leave blank. The container derives its own address from
+      # each request and generates its TURN secret at startup. See DESIGN.md.
+      ALLOWED_HOSTS: "${TAWNY_ALLOWED_HOSTS:-}"
+      STUN_URLS: "${TAWNY_STUN_URLS:-stun:stun.l.google.com:19302,stun:stun.cloudflare.com:3478}"
+      RENDEZVOUS_URL: "${TAWNY_RENDEZVOUS_URL:-}"
+      TURN_MODE: "auto"
+      TURN_EMBEDDED: "${TAWNY_TURN_EMBEDDED:-on}"
+      TURN_PORT: "3478"
+      TAWNY_PUBLIC_IP: "${TAWNY_PUBLIC_IP:-}"
+      TAWNY_TURN_URLS: "${TAWNY_TURN_URLS:-}"
+      TAWNY_TURN_SECRET: "${TAWNY_TURN_SECRET:-}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8099/healthz | grep -q '\"ok\":true'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  tawny-data:
+
+# --- bridge variant, if host networking is not available --------------------
+#
+# Replace `network_mode: host` with the ports block below, and set TS_ROUTES to
+# the LAN CIDR the Monitor phone is on (e.g. 192.168.1.0/24) — the container
+# cannot see it for itself from behind a bridge. The /lan bridge that lets a
+# browser reach the phone's own relay does not work from here either, so a
+# remote Viewer relies on the phone's cloud-rendezvous fallback plus coturn.
+#
+#    ports:
+#      - "8099:8099"
+#      - "3478:3478/udp"
+#      - "3478:3478/tcp"
+#      - "49160-49200:49160-49200/udp"
