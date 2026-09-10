@@ -1500,7 +1500,14 @@ wss.on('connection', (ws, req, ctx) => {
 
     let register = null;
     if (role === 'viewer') {
-      if (REQUIRE_TICKET && (!rec || sha256hex(msg.t) !== rec.hashT)) return ws.close(4008, 'pairing expired');
+      // Two very different failures used to share one code and one sentence.
+      // `!rec` means no Monitor has ever registered this room: nothing is wrong
+      // with the code in the Viewer's hand — the Monitor simply is not running.
+      // Telling that person "your pairing code expired" sends them back to
+      // rescan the same QR, for ever, which is exactly the loop reported. 4010
+      // says the true thing, and public/app.js has its own sentence for it.
+      if (REQUIRE_TICKET && !rec) return ws.close(4010, 'monitor offline');
+      if (REQUIRE_TICKET && sha256hex(msg.t) !== rec.hashT) return ws.close(4008, 'pairing expired');
     } else { // station
       if (rec?.auth && proof && proof !== rec.auth) return ws.close(4008, 'wrong channel key');
       const mayRekey = proof !== null || !rec?.auth;

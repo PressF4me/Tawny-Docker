@@ -88,6 +88,10 @@
       w_bail_not_on_wifi: 'This phone is not on Wi-Fi yet. Connect it to Wi-Fi and try again.',
       w_bail_wifi_only_code: 'This code only works on the same Wi-Fi as the other phone. Put both phones on the same Wi-Fi and try again.',
       w_bail_already_running: 'This monitor is already running on another phone.',
+      // The relay has no ticket for this room at all: the Monitor is not running,
+      // which is a different thing from a code that stopped working. Saying
+      // "expired" here sent people back to rescan the same QR for ever.
+      w_bail_monitor_offline: 'The monitor is not online yet. Open Tawny on the monitor phone or computer and press Start, then scan again.',
       w_msg_expired: 'That pairing code has expired. Show a new code on the monitor phone and scan it again.',
     },
 
@@ -160,6 +164,7 @@
       w_bail_not_on_wifi: 'Este teléfono aún no está en Wi-Fi. Conéctalo a Wi-Fi e inténtalo de nuevo.',
       w_bail_wifi_only_code: 'Este código solo funciona en la misma red Wi-Fi que el otro teléfono. Pon los dos teléfonos en la misma Wi-Fi e inténtalo de nuevo.',
       w_bail_already_running: 'Este monitor ya se está ejecutando en otro teléfono.',
+      w_bail_monitor_offline: 'El monitor aún no está en línea. Abre Tawny en el teléfono o la computadora del monitor y pulsa Iniciar, luego vuelve a escanear.',
       w_msg_expired: 'Ese código de vinculación caducó. Muestra un código nuevo en el teléfono monitor y escanéalo otra vez.',
     },
   };
