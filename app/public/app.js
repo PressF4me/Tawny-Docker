@@ -596,7 +596,10 @@ function renderChannels() {
 
     const cue = document.createElement('span');
     cue.className = 'ch-cue';
-    cue.textContent = 'Choose Monitor or Viewer';
+    const remembered = roleFor(ch);
+    cue.textContent = remembered === 'station' ? 'Resume as Monitor'
+      : remembered === 'viewer' ? 'Resume as Viewer'
+      : 'Choose Monitor or Viewer';
 
     const fp = document.createElement('span');
     fp.className = 'ch-fp';
@@ -635,6 +638,8 @@ function deleteChannel(ch) {
     localStorage.removeItem(`tawny.sas.${ch.id}`);
     localStorage.removeItem(`tawny.bond.${ch.id}`);
     localStorage.removeItem(`tawny.paired.${ch.id}`);
+    localStorage.removeItem(`tawny.token.${ch.id}`);
+    localStorage.removeItem(`tawny.role.${ch.id}`);
   } catch {}
   renderChannels();
   toast('Monitor removed');
@@ -657,6 +662,11 @@ $('#row-rename').addEventListener('click', () => {
   const ch = menuChannel;
   closeRowMenu();
   if (ch) openEditor(ch);
+});
+$('#row-switch-role')?.addEventListener('click', () => {
+  const ch = menuChannel;
+  closeRowMenu();
+  if (ch) openRole(ch, true);
 });
 $('#row-delete').addEventListener('click', () => {
   const ch = menuChannel;
@@ -705,16 +715,23 @@ $('#editor-save').addEventListener('click', saveEditor);
 $('#editor-cancel').addEventListener('click', () => { closeSheet(el.editor); S.editing = null; });
 el.editorName.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveEditor(); });
 
-function openRole(ch) {
+/**
+ * `force` skips the remembered role — the "Switch role" row-menu action uses
+ * it, so a household that repurposes a phone is not stuck asking Tawny to
+ * forget first.
+ */
+function openRole(ch, force = false) {
   S.channel = ch;
+  const remembered = !force && roleFor(ch);
+  if (remembered) { start(remembered); return; }
   el.roleName.textContent = ch.name;
   note(el.roleNote, '');
   show(el.role);
 }
 
 $('#role-back').addEventListener('click', () => { S.channel = null; show(el.channels); });
-$('#pick-station').addEventListener('click', () => start('station'));
-$('#pick-viewer').addEventListener('click', () => start('viewer'));
+$('#pick-station').addEventListener('click', () => { setRoleFor(S.channel, 'station'); start('station'); });
+$('#pick-viewer').addEventListener('click', () => { setRoleFor(S.channel, 'viewer'); start('viewer'); });
 
 // ------------------------------------------------------- first-run setup
 
@@ -771,6 +788,7 @@ function tickWatchPair() {
 
 async function openWatchPair() {
   S.channel = watcherChannel();
+  setRoleFor(S.channel, 'station');
   // Same rule as openPair(): never open on a code that has already lapsed.
   if (pairCodeLeft() <= 0 && !S.nativeShell) newPairCode();
   // refreshWatchPair() first, because pairLink() is what mints S.token — and
@@ -952,6 +970,40 @@ function fillRelayHint(box, code) {
 
 const PAIRED_KEY = () => `tawny.paired.${S.channel?.id}`;
 const BOND_KEY = () => `tawny.bond.${S.channel?.id}`;
+// The pairing ticket itself — the shared secret a Monitor mints once and every
+// Viewer must present. Neither role used to keep it past the tab it was set
+// in: a browser Monitor minted a fresh one on every page load, and a browser
+// Viewer only ever had one moment (adopt()'s URL fragment) to learn it. Either
+// alone made hangUp()'s reload, a browser refresh, or just reopening a channel
+// from the list indistinguishable from the code having expired — the relay
+// refuses a hello with no ticket (or the wrong one) the same way it refuses a
+// stranger. Persisted per channel, it survives all three.
+const TOKEN_KEY = () => `tawny.token.${S.channel?.id}`;
+function savedToken() {
+  let v = null;
+  try { v = localStorage.getItem(TOKEN_KEY()); } catch {}
+  return TICKET_RE.test(v || '') ? v : null;
+}
+function saveToken(token) {
+  if (!S.channel || !TICKET_RE.test(token || '')) return;
+  try { localStorage.setItem(TOKEN_KEY(), token); } catch {}
+}
+
+// Which job this device does for a given channel, remembered so opening it a
+// second time goes straight to that screen instead of asking again — a phone
+// left as the household's Viewer is the Viewer every time, not a question.
+// Explicit `ch` argument (not S.channel) because renderChannels() reads this
+// for every row in the list, not just the one currently open.
+const ROLE_KEY = (ch) => `tawny.role.${ch?.id}`;
+function roleFor(ch) {
+  let v = null;
+  try { v = localStorage.getItem(ROLE_KEY(ch)); } catch {}
+  return v === 'station' || v === 'viewer' ? v : null;
+}
+function setRoleFor(ch, role) {
+  if (!ch) return;
+  try { localStorage.setItem(ROLE_KEY(ch), role); } catch {}
+}
 // One Monitor holds three phones; twice that is room for a household that has
 // re-installed a couple of times, and small enough that a stolen code cannot
 // quietly enrol an army.
@@ -1032,7 +1084,7 @@ function pairLink() {
   // exist by the time the QR is drawn or the link would hand out a `t` the
   // Monitor then replaced. Only the browser mints one: inside the native shell
   // the ticket comes from the shell, and pairLink() is not the screen in use.
-  if (!S.token && !S.nativeShell) S.token = newKey();
+  if (!S.token && !S.nativeShell) S.token = savedToken() || newKey();
   const frag = new URLSearchParams({ k: S.channel.key, n: S.channel.name, r: 'viewer' });
   if (S.token) frag.set('t', S.token);
   frag.set('c', code.c);
@@ -1360,6 +1412,10 @@ function adopt(raw) {
   }
   renderChannels();
   S.channel = ch;
+  // Remember the ticket this scan just handed us — this device's only chance
+  // to learn it — so reconnecting later never depends on rescanning.
+  if (S.token) saveToken(S.token);
+  setRoleFor(ch, 'viewer');
   S.pending = 'viewer';
   el.joinName.textContent = ch.name;
   note(el.joinNote, lastRelayNote || '');
@@ -3677,7 +3733,13 @@ async function start(role, opts = {}) {
   // could only work with ticket checking turned off. It mints its own now, and
   // this must happen before fetchIce() asks /turn for credentials and before
   // pairLink() builds the fragment that hands it on.
-  if (role === 'station' && !S.token) S.token = newKey();
+  if (role === 'station' && !S.token) S.token = savedToken() || newKey();
+  // A Viewer resuming this channel from the list (not a fresh scan) has no
+  // token in memory — it only ever lived in this session's S. Pull back
+  // whatever it last learned, so "click Viewer" reconnects instead of dialling
+  // in with nothing to present and being told the code expired.
+  if (role === 'viewer' && !S.token) S.token = savedToken();
+  if (S.token) saveToken(S.token);
   S.relayBase = null;   // a new session gives the user's own relay a fresh try
   S.roomId = await roomIdFor(S.channel.key);
   diag(`start role=${role} room=${S.roomId} lan=${S.signalUrl || '-'} ` +
@@ -4232,6 +4294,19 @@ $('#btn-mute').addEventListener('click', () => {
   const btn = $('#btn-mute');
   press(btn, !S.micOn);
   btn.querySelector('span:last-child').textContent = S.micOn ? 'Mute mic' : 'Unmute mic';
+});
+
+// Viewer: silence what plays back here. Purely local — the Monitor keeps
+// transmitting and nobody else's session is touched, so muting to check a
+// noisy room does not also mute talk-back or a chime landing at the far end.
+$('#btn-mute-viewer')?.addEventListener('click', () => {
+  const btn = $('#btn-mute-viewer');
+  el.remoteAudio.muted = !el.remoteAudio.muted;
+  const muted = el.remoteAudio.muted;
+  btn.setAttribute('aria-pressed', String(muted));
+  press(btn, muted);
+  btn.querySelector('span:last-child').textContent = muted
+    ? TawnyT.t('w_ctl_unmute') : TawnyT.t('w_ctl_mute_listen');
 });
 
 // Dim mode. The overlay used to be only a black <div> laid over the page: on

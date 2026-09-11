@@ -21,6 +21,8 @@
       w_ctl_hang_up: 'Hang up',
       w_ctl_flip_camera: 'Flip camera',
       w_ctl_mute_mic: 'Mute mic',
+      w_ctl_mute_listen: 'Mute',
+      w_ctl_unmute: 'Unmute',
       w_ctl_dim_screen: 'Dim screen',
       w_ctl_end_call: 'End call',
       // --- chimes ---
@@ -104,6 +106,8 @@
       w_ctl_hang_up: 'Colgar',
       w_ctl_flip_camera: 'Girar',
       w_ctl_mute_mic: 'Silenciar',
+      w_ctl_mute_listen: 'Silenciar',
+      w_ctl_unmute: 'Activar sonido',
       w_ctl_dim_screen: 'Atenuar',
       w_ctl_end_call: 'Terminar',
       w_chime_bark: 'Juguete de perro',

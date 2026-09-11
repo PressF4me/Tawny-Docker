@@ -8,10 +8,21 @@ Tailscale.
 nothing hosted by anyone else. You point an old phone at the pet and watch from
 a browser; the only thing that ever sees the stream is you.
 
-The **Monitor** is the Tawny Android app on an old phone pointed at your best friend, or your pet. The
-**Viewer** is a browser on a laptop, desktop, or another phone. This container
-serves the Viewer's page and joins your tailnet so the two ends can find each
-other; the video and audio go straight between them and never pass through it.
+**What this is mainly for: a bridge.** The Monitor phone runs the Tawny Android
+app, pointed at your pet. Whoever's watching doesn't need the app at all — they
+open the `https://…ts.net` address this container publishes, in a plain
+browser, on anything signed into your tailnet: a laptop, someone else's phone,
+a shared family tablet. No app store, no install, no account, for them. That's
+the point of running this at all — the app download that's easy for you is a
+wall for a grandparent, a house-sitter, or a phone you don't control.
+
+It doesn't stop there, though. Both ends can just as well be this same web
+page — open it on two phones, pick Monitor on one and Viewer on the other, and
+it works exactly the same way with nothing installed on either. Use whichever
+mix fits the room: app on the Monitor and a browser Viewer (the common case),
+or browser on both. The container serves either role and joins your tailnet so
+the two ends can find each other; the video and audio go straight between them
+and never pass through it.
 
 The image is pulled from `ghcr.io/pressf4me/tawny` — nothing to build, and the
 only file you need from this repo is `docker-compose.yml`.
@@ -134,13 +145,14 @@ outside. Tailscale is how this is meant to run; LAN-only is a fallback.
 
 ## Two ways to self-host
 
-This container is for **browser Viewers** over your Tailscale; the Monitor phone
-stays stock.
+This container is the bridge: the app as the Monitor, and a **browser Viewer**
+— any device, no install — over your Tailscale. It works the other way and
+both-ways too; either role can be a browser, either can be the app.
 
-For **phone-to-phone remote pairing** — both ends the Tawny app on different
-networks — see the `rendezvous/` service in the Tawny app repo: a Cloudflare
-Worker / Deno signalling introducer. The two paths are independent and can run
-together.
+For **phone-to-phone remote pairing without this container at all** — both ends
+the Tawny app, on different networks — see the `rendezvous/` service in the
+Tawny app repo: a Cloudflare Worker / Deno signalling introducer. The two paths
+are independent and can run together.
 
 ---
 
