@@ -164,7 +164,13 @@ export TS_SERVE
 # the operator take rather than a setting they have to discover: the answer is
 # remembered in TAWNY_ROUTE_CHOICE_FILE, so turning it on needs no file editing
 # and survives a restart. server.js writes that file; this reads it.
-TS_ROUTES="${TS_ROUTES:-off}"
+# `${X-default}`, not `${X:-default}`. The colon form fires on unset *or empty*,
+# which quietly made the "empty / auto" contract documented four lines above
+# into dead code: an explicitly empty TS_ROUTES= became "off" before the case
+# below could ever see it, so only the literal word `auto` ever auto-detected.
+# The bare form defaults on unset alone, which is what was always meant — unset
+# stays off, and off-by-default is deliberate (see the long note above).
+TS_ROUTES="${TS_ROUTES-off}"
 ROUTE_CHOICE_FILE="${TAWNY_ROUTE_CHOICE_FILE:-/data/route-choice}"
 export TAWNY_ROUTE_CHOICE_FILE="$ROUTE_CHOICE_FILE"
 

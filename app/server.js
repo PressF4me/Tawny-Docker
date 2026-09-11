@@ -40,6 +40,10 @@ const STUN = process.env.STUN_URLS === 'off'
   ? []
   : list(process.env.STUN_URLS || 'stun:stun.l.google.com:19302,stun:stun.cloudflare.com:3478');
 const ALLOWED_HOSTS = list(process.env.ALLOWED_HOSTS).map((h) => h.toLowerCase());
+// Escape hatch for a browser client that sends `Origin: null` (an opaque
+// origin). Off by default — see originAllowed() for why that blanket trust was
+// removed, and why this is not a value in ALLOWED_HOSTS.
+const ALLOW_NULL_ORIGIN = /^(1|on|yes|true)$/i.test(String(process.env.ALLOW_NULL_ORIGIN || ''));
 const TRUST_PROXY = process.env.TRUST_PROXY !== 'off';
 
 // Remote relay (all optional). RENDEZVOUS_URL is only echoed for a browser
@@ -344,15 +348,31 @@ async function turnCreds(req) {
 // The Tawny app is the exception, and a deliberate one: its WebView serves the
 // bundled page from http://127.0.0.1:<random-port> and dials this container as
 // its rendezvous, so its handshake carries Origin: http://127.0.0.1:<port> with
-// this node's ts.net Host — never same-origin. A loopback Origin (or the
-// `Origin: null` some WebViews send) cannot belong to a remote attacker page —
-// a browser sets Origin to the page's real origin and no internet page loads
-// from 127.0.0.1 — so it is always allowed. Same rule the cloud rendezvous
-// applies; see rendezvous/worker.js originOk(). The admission ticket and the
-// hashed room id are what actually gate a join.
+// this node's ts.net Host — never same-origin. A loopback Origin cannot belong
+// to a remote attacker page: a browser sets Origin to the page's real origin,
+// and no page served from the internet has one on 127.0.0.1. So loopback is
+// always allowed. The admission ticket and the hashed room id are what actually
+// gate a join; this is the outer, coarse door.
 function originAllowed(req) {
   const origin = req.headers.origin;
-  if (!origin || origin === 'null') return true; // non-browser client, or a WebView that sends no real Origin
+  // No Origin header at all is a non-browser client — the native app's own
+  // socket, probe.sh, curl. A browser always sends one on a cross-origin
+  // WebSocket, so this cannot be a page.
+  if (!origin) return true;
+  // `Origin: null` is a different thing entirely, and it used to be waved
+  // through alongside the above. It is what a browser sends for an *opaque*
+  // origin — a sandboxed cross-site iframe, a data: document, some redirect
+  // chains — so trusting it handed exactly the pages this function exists to
+  // stop the same pass the app's WebView gets. It was added speculatively
+  // ("some WebViews send that"); device logs since show the app sends a
+  // concrete http://127.0.0.1:<port>, which the loopback rule below covers on
+  // its own, so nothing real depended on it. An operator who does meet a client
+  // that sends `null` can opt in with ALLOW_NULL_ORIGIN=on rather than having it
+  // on for everyone. Deliberately its own variable and not a value in
+  // ALLOWED_HOSTS: that list also pins the acceptable Host header (hostAllowed
+  // above), so ALLOWED_HOSTS=null would mean "serve only requests addressed to
+  // the host `null`" and 421 every real request — measured, not guessed.
+  if (origin === 'null') return ALLOW_NULL_ORIGIN;
   let parsed;
   try { parsed = new URL(origin); } catch { return false; }
   const oh = parsed.hostname.toLowerCase();
@@ -927,12 +947,16 @@ async function withdrawRoutes() {
   // Doubles as the "no, this Wi-Fi only" answer: recorded either way, so the
   // question is asked once and never again.
   setRouteChoice('lan-only');
-  const keep = withoutRoute(await advertisedRoutes(), ourRoute());
+  // The CIDR actually withdrawn, not the raw variable. TAWNY_TS_ROUTES is "off"
+  // in the default deployment — ourRoute() is what resolves that to the subnet
+  // this container is on — so the log read "stopped advertising off".
+  const mine = ourRoute();
+  const keep = withoutRoute(await advertisedRoutes(), mine);
   const r = await run('tailscale',
     [`--socket=${TAWNY_TS_SOCKET}`, 'set', `--advertise-routes=${keep.join(',')}`]);
   if (r.ok) {
     recordStep('tailscale_routes', true, keep.length
-      ? `stopped advertising ${TAWNY_TS_ROUTES}; this device still carries ${keep.join(', ')}`
+      ? `stopped advertising ${mine}; this device still carries ${keep.join(', ')}`
       : 'withdrew this device\'s advertised route(s) from the setup page');
   }
   return r.ok;
@@ -998,7 +1022,15 @@ function setupReady(s) {
   // it unfinished redirected every visit to /setup for ever with a step the
   // operator could not close from here.
   const carried = (ts.approvedRoutes || []).length || (ts.routeCoveredBy || []).length;
-  if ((ts.routeConflicts || []).length && !carried) return false;
+  // ...and once the operator has answered "this Wi-Fi only", a conflict is not
+  // theirs to resolve any more. Tawny advertises nothing in that state, so the
+  // overlap it detected is between other people's devices — reporting it as
+  // unfinished held /setup open for ever on a decision that had been made, with
+  // no button on the page that could close it. A conflict while we are still
+  // advertising is a different matter and is caught above: anything we are
+  // putting out lands in approvedRoutes (making `carried` truthy) or in
+  // pendingRoutes, which has already returned false.
+  if ((ts.routeConflicts || []).length && !carried && ts.routeChoice !== 'lan-only') return false;
   // Remote access is off until asked for, and "off" is a legitimate finished
   // state — but only once somebody has actually chosen it. Left as a silent
   // default it would ship a deployment nobody can watch from outside the

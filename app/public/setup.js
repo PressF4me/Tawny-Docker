@@ -790,6 +790,27 @@ function stepRoute(data) {
       };
     }
 
+    // The decision has already been taken: this Wi-Fi only. Tawny advertises
+    // nothing in that state, so the overlap is between other people's devices
+    // and there is nothing left here for this operator to decide. Asking again
+    // below left the step reading "needs your decision" for ever over a question
+    // they had answered, and setupReady() agreeing with it bounced every visit
+    // back to /setup. Same test setupReady() now makes, so the page and the
+    // redirect cannot disagree.
+    if (!tailscale.routesEnabled && tailscale.routeChoice === 'lan-only') {
+      return {
+        state: 'done',
+        title: 'Let your devices reach the camera',
+        tag: 'this Wi-Fi only',
+        body: [
+          el('p', { class: 'step-say' }, `Remote access is off, so Tawny works from devices on this Wi-Fi. Nothing is advertised to the rest of your Tailscale network — so the overlap with ${who} is not something Tawny is taking part in.`),
+          routeActionButton('Turn on remote access after all', 'wide', '/setup/route/advertise', { force: true }),
+          goLink(LINK.subnets, 'Read Tailscale’s notes on overlapping subnets'),
+          explain
+        ]
+      };
+    }
+
     return {
       state: 'now',
       title: 'Let your devices reach the camera',
@@ -890,8 +911,14 @@ function devicesAcked() {
 
 function stepDevices(data) {
   const { tailscale } = data;
+  // A route carried by somebody else counts. renderVerdict() and setupReady()
+  // both already treat "a peer routes this range" as the path existing — only
+  // this step insisted on a route of Tawny's own, so the common healthy
+  // deployment (a NAS already routing the LAN, Tawny correctly declining to be
+  // a second router) sat here reading "after the steps above" for ever, with
+  // the banner above it saying everything was ready.
   const ready = tailscale.loggedIn && !(tailscale.pendingRoutes || []).length
-    && (tailscale.approvedRoutes || []).length;
+    && ((tailscale.approvedRoutes || []).length || (tailscale.routeCoveredBy || []).length);
 
   const peers = (tailscale.peers || []).filter((p) => p.name);
   const peerBox = peers.length
