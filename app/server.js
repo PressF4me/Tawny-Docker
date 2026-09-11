@@ -115,6 +115,16 @@ const TS_RECOVER_REQ = join(RUN_DIR, 'ts-recover.req');
 // feature would be a setting nobody finds; with it, /setup can turn routing on
 // live and the choice outlives the container. See docker/entrypoint.sh.
 const ROUTE_CHOICE_FILE = process.env.TAWNY_ROUTE_CHOICE_FILE || '/data/route-choice';
+// A key that has just worked, cached in the volume (not .env — a host-side
+// file this process cannot write) so a node identity lost for any reason can
+// reauthenticate on its own next boot instead of parking logged out until
+// someone comes back to /setup with a key again. See docker/entrypoint.sh,
+// which writes and reads the same file for the boot-time TS_AUTHKEY path;
+// this is the counterpart for a key pasted live into the page.
+const TS_AUTHKEY_CACHE = process.env.TAWNY_TS_AUTHKEY_CACHE || '/data/.tawny-authkey';
+function cacheAuthKey(key) {
+  try { writeFileSync(TS_AUTHKEY_CACHE, key, { mode: 0o600 }); } catch { /* best effort */ }
+}
 
 const MAX_PER_ROOM = 4;      // one Watcher + up to three Handhelds
 const MAX_STATIONS = 1;
@@ -852,6 +862,7 @@ async function joinTailnet(key) {
     recordStep('tailscale_up', false, detail || 'tailscale up failed', outKind);
     return { ok: false, kind: outKind, error: detail || 'tailscale up failed' };
   }
+  cacheAuthKey(key);
   recordStep('tailscale_up', true, 'joined the tailnet from the setup page');
 
   await tryServe();

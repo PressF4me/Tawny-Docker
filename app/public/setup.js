@@ -666,6 +666,7 @@ function stepConnect(data) {
             el('li', {}, 'Turn Reusable ON, leave Ephemeral OFF — an ephemeral key makes Tawny vanish from your network on every restart.'),
             el('li', {}, 'Copy it, and paste it below.'))),
         goLink(LINK.keys, 'Get an auth key'),
+        el('p', { class: 'step-say' }, 'Once this works, Tawny remembers it — an update or a restart never asks again.'),
 
         joinForm(),
 

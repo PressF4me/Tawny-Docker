@@ -135,6 +135,20 @@ TS_AUTHKEY="${TS_AUTHKEY:-}"
 TS_HOSTNAME="${TS_HOSTNAME:-tawny}"
 TS_STATE_DIR="${TS_STATE_DIR:-/data/tailscale}"
 TS_HOST_SOCKET="${TS_HOST_SOCKET:-/var/run/tailscale/tailscaled.sock}"
+# A key that has already worked once, saved in the volume — not .env, which is
+# a host-side file this container has no way to write. Without this, a node
+# identity lost for any reason (the self-heal, a manual removal in the admin
+# console, an operator who only ever pasted a key into /setup and never put
+# one in .env) parked the container logged out forever: nothing in it could
+# reauthenticate on its own, so every recovery meant a human back at /setup
+# with a fresh — or the same, retyped — key. TS_AUTHKEY from the environment
+# still wins when set; this is only the fallback for when it is not.
+TS_AUTHKEY_CACHE="${TAWNY_TS_AUTHKEY_CACHE:-/data/.tawny-authkey}"
+export TAWNY_TS_AUTHKEY_CACHE="$TS_AUTHKEY_CACHE"
+if [ -z "$TS_AUTHKEY" ] && [ -s "$TS_AUTHKEY_CACHE" ]; then
+	TS_AUTHKEY="$(cat "$TS_AUTHKEY_CACHE" 2>/dev/null || true)"
+	[ -n "$TS_AUTHKEY" ] && log "using the auth key saved from an earlier setup — nothing to paste again"
+fi
 # Normalised to exactly `on` or `off`, and exported, because server.js reads
 # the same variable and reads it the other way round: this script asks
 # `= on` (anything else is off) and server.js asks `!== 'off'` (anything else
@@ -370,6 +384,15 @@ ts_reset_state() {
 	ts_launch
 }
 
+# Remember a key that just worked, so the next identity loss — whatever
+# causes it — can reauthenticate on its own. Same trust boundary as the node's
+# own private key next to it in $TS_STATE_DIR; 0600, never logged, never
+# served (redact_key() still scrubs it from anything that IS logged, in case
+# a caller ever passes it through log/step by mistake).
+ts_cache_key() { # authkey
+	( umask 077; printf '%s' "$1" >"$TS_AUTHKEY_CACHE" ) 2>/dev/null || true
+}
+
 # Join the tailnet with $1. --timeout so a control-plane stall returns a real,
 # classifiable error instead of blocking; on a stale identity, archive it and
 # retry once — the "replace an old session on the spot" the operator should
@@ -382,6 +405,7 @@ ts_join() { # authkey
 		--accept-dns=false --accept-routes=false --timeout=60s \
 		>"$RUN_DIR/ts-up.log" 2>&1; then
 		rm -f "$TS_RESET_MARK"
+		ts_cache_key "$1"
 		log "joined the tailnet as $TS_HOSTNAME"
 		step tailscale_up 1 "joined the tailnet as $TS_HOSTNAME"
 		advertise_route "$ts_sock"
@@ -402,6 +426,7 @@ ts_join() { # authkey
 			# self-heal for the life of the volume, and the *next* time an
 			# identity goes stale nothing would clear it.
 			rm -f "$TS_RESET_MARK"
+			ts_cache_key "$1"
 			log "joined as $TS_HOSTNAME after clearing a leftover identity"
 			step tailscale_up 1 "joined after clearing a leftover Tailscale identity; the old state was archived to $(cat "$RUN_DIR/ts-archived" 2>/dev/null || true)"
 			advertise_route "$ts_sock"
