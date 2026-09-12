@@ -1877,16 +1877,18 @@ function sasPendingViewers() {
 /**
  * Monitor: cloud Handhelds whose safety code could not be computed at all.
  *
- * This is the alarm, and it is deliberately NOT gated on sasReviewed(). Vouching
- * for a channel once means "I have compared the codes and this monitor is mine";
- * it does not mean "never tell me again that a code could not be derived". A
- * failure here is the one signal that survives the once-per-channel review, and
- * SECURITY.md promises it fires on every affected call *on both ends* — which
- * was true of the Handheld and, until now, false of the Monitor: this list used
- * to be folded into sasPendingViewers(), which filters on `p.sas` being truthy,
- * so the failed peers were silently discarded and the Monitor rendered nothing.
+ * Gated on sasReviewed(), same as sasPendingViewers() — this used to fire on
+ * every affected call even on a channel already vouched for, on the theory
+ * that "I compared the codes once" shouldn't silence "a code could not be
+ * derived at all". In practice a code fails to compute on perfectly ordinary
+ * reconnects (a network blip mid-handshake, getStats() not ready yet), so an
+ * already-trusted Monitor kept re-alarming over its own live video for
+ * connectivity hiccups, not attacks. Still logged to the flight recorder
+ * either way (see showSas) — just not interrupted over for a channel the
+ * user already vouched for.
  */
 function sasFailedViewers() {
+  if (sasReviewed()) return [];
   return viewerPeers().filter(
     (p) => p.transport?.tag === 'cloud' && p.sasFailed && !p.sasOk
   );
@@ -1919,7 +1921,7 @@ function syncStationSas() {
   // is still a live cloud peer that wants an answer.
   let ask = S.sasAsk ? S.peers.get(S.sasAsk) : null;
   const wanted = (p) =>
-    p && !p.sasOk && p.transport?.tag === 'cloud' && (p.sasFailed || (p.sas && !sasReviewed()));
+    p && !p.sasOk && p.transport?.tag === 'cloud' && !sasReviewed() && (p.sasFailed || p.sas);
   if (!wanted(ask)) ask = failed[0] || pending[0] || null;
   S.sasAsk = ask ? ask.id : null;
 
@@ -1976,17 +1978,25 @@ function showViewerSas(code) {
   // Retire the old per-channel store rather than leave a stale code behind it.
   try { localStorage.removeItem(`tawny.sas.${S.channel?.id}`); } catch {}
 
-  // Already reviewed once for this channel, and the code came through fine:
-  // say nothing at all - no card, no chip.
-  if (code && sasReviewed()) {
+  // Already reviewed once for this channel: say nothing at all, whether this
+  // call's code came through or not. A code failing to compute on a channel
+  // already vouched for is an ordinary reconnect hiccup far more often than an
+  // attack (see sasFailedViewers) — still logged by showSas either way, just
+  // not interrupted over.
+  if (sasReviewed()) {
     el.sas.hidden = true;
-    el.sas.classList.remove('sas--warn');
+    el.sas.classList.remove('sas--warn', 'sas--gate');
     el.saschip.hidden = true;
     return;
   }
 
   el.saschip.hidden = true;      // the code lives on the card, never in the rail
 
+  // Every card the Handheld sees past this point is, by construction, the
+  // first cloud connection to this channel — a full takeover rather than a
+  // card over live video, so it reads as a step before the call, not an
+  // interruption during one.
+  el.sas.classList.add('sas--gate');
   el.sascode.textContent = code || TawnyT.t('w_sas_code_unavailable');
   el.sas.classList.toggle('sas--warn', !code);
   if (el.sasnote) {
@@ -3623,7 +3633,17 @@ function screenIsWide() {
 // A well-behaved camera is right on the first ask and this costs it nothing.
 const captureSwap = { wide: false, tall: false };
 
-function idealCaptureSize(wide = screenIsWide(), long = 960, short = 540) {
+// The AOSP emulator's real-webcam passthrough does per-frame colour-space
+// conversion in software (no hardware path the way a phone's camera HAL has
+// one), so the same capture ask that is free on a device pins a vCPU on the
+// emulator. Detected from the WebView's default user-agent, which carries the
+// device model — real phones and the packaged app never match this.
+const IS_EMULATOR = /sdk_gphone|Android SDK built for|generic_x86|goldfish/i.test(navigator.userAgent);
+const CAP_LONG = IS_EMULATOR ? 640 : 960;
+const CAP_SHORT = IS_EMULATOR ? 360 : 540;
+const CAP_FPS = IS_EMULATOR ? 15 : 24;
+
+function idealCaptureSize(wide = screenIsWide(), long = CAP_LONG, short = CAP_SHORT) {
   const askWide = wide !== (wide ? captureSwap.wide : captureSwap.tall);
   return askWide
     ? { width: { ideal: long }, height: { ideal: short } }
@@ -3691,7 +3711,7 @@ async function settledShape(track, want, ms = 1500) {
  * note that applyConstraints replaces the whole set including `advanced`, so
  * every caller has to reassert the torch afterwards.
  */
-async function shapeCapture(track, wide = screenIsWide(), extra = null, long = 960, short = 540) {
+async function shapeCapture(track, wide = screenIsWide(), extra = null, long = CAP_LONG, short = CAP_SHORT) {
   if (!track) return false;
   const key = wide ? 'wide' : 'tall';
   const ask = async () => {
@@ -3701,7 +3721,7 @@ async function shapeCapture(track, wide = screenIsWide(), extra = null, long = 9
     try {
       await track.applyConstraints({
         ...idealCaptureSize(wide, long, short),
-        frameRate: { ideal: 24, max: 30 },
+        frameRate: { ideal: CAP_FPS, max: Math.max(CAP_FPS, 30) },
         ...(extra || {})
       });
     } catch {}
@@ -3752,7 +3772,7 @@ function cameraConstraints(wide = screenIsWide()) {
   return {
     facingMode: { ideal: S.facing },
     ...idealCaptureSize(wide),
-    frameRate: { ideal: 24, max: 30 }
+    frameRate: { ideal: CAP_FPS, max: Math.max(CAP_FPS, 30) }
   };
 }
 
@@ -4307,7 +4327,7 @@ $('#btn-flip').addEventListener('click', async () => {
     video: {
       facingMode: { ideal: facing },
       ...idealCaptureSize(),
-      frameRate: { ideal: 24, max: 30 }
+      frameRate: { ideal: CAP_FPS, max: Math.max(CAP_FPS, 30) }
     }
   });
 

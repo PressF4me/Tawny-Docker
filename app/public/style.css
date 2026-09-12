@@ -806,6 +806,40 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .sas--warn .sas-code { color: color-mix(in srgb, var(--live) 55%, #ffffff); }
 .sas-actions .wide { flex: 1; margin: 0; }
 
+/* Handheld's first-connection review: a full takeover instead of a card
+   floating over live video, so verifying the Monitor reads as a step before
+   the call rather than an interruption during one. The Monitor's per-phone
+   ask (syncStationSas) never gets this class — it stays the compact card
+   over the Monitor's own always-on self-view, which is a different thing to
+   interrupt. */
+.sas--gate {
+  position: fixed;
+  inset: 0;
+  left: 0; bottom: 0; transform: none;
+  width: 100%; height: 100%;
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: var(--bg);
+  box-shadow: none;
+  z-index: 50;
+  padding: 24px;
+  /* .sas's slide-in keyframes assume the bottom-centered card's own
+     translateX(-50%) — reapplying that to a full-width fixed element would
+     animate it sideways off-screen. A plain fade reads fine for a full
+     takeover anyway. */
+  animation: gate-in .2s ease;
+}
+@keyframes gate-in { from { opacity: 0; } to { opacity: 1; } }
+.sas--gate .sas-code { font-size: 40px; }
+.sas--gate .sas-actions, .sas--gate p { width: min(88vw, 360px); }
+
 .dot {
   width: 8px; height: 8px;
   border-radius: 50%;
