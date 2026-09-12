@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Refresh app/ — the vendored server payload the image is built from — from the
-# Tawny Android checkout, which is the source of truth for it.
+# Refresh app/public/ — the shared web client the image serves — from the
+# Tawny Android checkout, which is the source of truth for it (it's the same
+# WebView bundle that ships inside the APK).
 #
-# Run this after pulling server-side changes (server.js, public/, rendezvous/,
-# docker/, package*.json) into Tawny Android, then rebuild / re-probe / tag.
+# server.js, docker/, rendezvous/, and package*.json live only in this repo
+# now — Tawny Android dropped them (it's APK-only, published separately on
+# GitHub) — so this only ever touches app/public/, never the rest of app/.
 #
 #   bash tools/tawny-sync                 # default source: ../Tawny Android
 #   TAWNY_ANDROID=/path/to/repo bash tools/tawny-sync
@@ -17,15 +19,15 @@ if [ ! -d "$src/.git" ]; then
 	exit 1
 fi
 
-paths=(server.js public rendezvous docker package.json package-lock.json)
 ref="${1:-HEAD}"
 
-echo "==> syncing app/ from $src @ $(git -C "$src" rev-parse --short "$ref") (${paths[*]})"
-rm -rf "$here/app"
-mkdir -p "$here/app"
-git -C "$src" archive "$ref" -- "${paths[@]}" | tar -x -C "$here/app"
+echo "==> syncing app/public/ from $src @ $(git -C "$src" rev-parse --short "$ref") (public)"
+rm -rf "$here/app/public"
+mkdir -p "$here/app/public"
+git -C "$src" archive "$ref" -- public | tar -x -C "$here/app"
 
-# Record provenance so a built image can be traced to a server commit.
+# Record provenance so a built image can be traced to a web-client commit.
+# Only public/ tracks Android; server.js et al. are this repo's own history.
 git -C "$src" rev-parse HEAD > "$here/app/.source-commit"
-echo "==> app/ now at $(cat "$here/app/.source-commit")"
+echo "==> app/public/ now at $(cat "$here/app/.source-commit")"
 git -C "$here" status --short app 2>/dev/null || true
