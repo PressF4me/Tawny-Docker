@@ -55,11 +55,16 @@ upgrade later with `docker compose pull && docker compose up -d`. On start the
 container joins your tailnet as node `tawny`, detects its LAN, advertises that
 subnet, and publishes the app. `docker logs tawny` prints the URL and the route.
 
-**4. Approve the subnet route.** Open `http://<box>:8099/setup` from the LAN —
-it shows live status and names the exact next step. Until the route is approved
-at <https://login.tailscale.com/admin/machines> → **tawny** → **Edit route
-settings** → tick the subnet, a remote Viewer can't reach the phone. If `/setup`
-says HTTPS isn't on, step 2 was skipped — fix it and `docker compose restart`.
+**4. Approve the subnet route, and disable key expiry.** Open
+`http://<box>:8099/setup` from the LAN — it shows live status and names the
+exact next step. Until the route is approved at
+<https://login.tailscale.com/admin/machines> → **tawny** → **Edit route
+settings** → tick the subnet, a remote Viewer can't reach the phone. While
+you're in that same **⋯** menu, also choose **Disable key expiry** — Tawny
+runs unattended, and without this Tailscale logs it out roughly every 180
+days, silently breaking remote access until someone notices and pastes a
+fresh key in `/setup` or `.env`. If `/setup` says HTTPS isn't on, step 2 was
+skipped — fix it and `docker compose restart`.
 
 **5. Put your devices on the tailnet.** Every viewing device and the Monitor
 phone need Tailscale, signed into the same tailnet, with subnet routes accepted

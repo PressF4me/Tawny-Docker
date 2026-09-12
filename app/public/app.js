@@ -89,7 +89,8 @@ const S = {
   // it changes. On a Viewer: the last thing the Monitor said, rendered as-is.
   battery: { level: null, charging: null },
   remoteBattery: { level: null, charging: null },
-  cameras: [], cameraIndex: 0, zoomLevel: 1.0, zoomHardware: false, stationZoomSupported: false
+  cameras: [], cameraIndex: 0, zoomLevel: 1.0, zoomHardware: false, stationZoomSupported: false,
+  zoomPanX: 0, zoomPanY: 0
 };
 
 // One Monitor, three Viewers. Three is the product, not a preference: there is
@@ -2448,6 +2449,8 @@ function teardownAll() {
   const localEl = document.getElementById('local');
   if (localEl) localEl.style.transform = '';
   S.zoomLevel = 1.0;
+  S.zoomPanX = 0;
+  S.zoomPanY = 0;
   S.cameras = [];
   S.cameraIndex = 0;
   S.zoomHardware = false;
@@ -3391,10 +3394,29 @@ function applyZoom(level) {
   showZoomChip(level);
 }
 
+// How far off-center the pan can go at a given zoom level, in pixels along
+// one axis — the video is scaled about its own center, so past this the
+// letterboxed edge would show past the element's bounds.
+function maxPanFor(level, dim) {
+  return Math.max(0, ((level - 1) / 2) * dim);
+}
+
+function clampZoomPan() {
+  const remoteEl = document.getElementById('remote');
+  if (!remoteEl) return;
+  const maxX = maxPanFor(S.zoomLevel, remoteEl.clientWidth);
+  const maxY = maxPanFor(S.zoomLevel, remoteEl.clientHeight);
+  S.zoomPanX = Math.min(Math.max(S.zoomPanX, -maxX), maxX);
+  S.zoomPanY = Math.min(Math.max(S.zoomPanY, -maxY), maxY);
+}
+
 function applyDigitalZoomViewer(level) {
   const remoteEl = document.getElementById('remote');
   if (!remoteEl) return;
-  remoteEl.style.transform = level > 1 ? `scale(${level})` : '';
+  clampZoomPan();
+  remoteEl.style.transform = level > 1
+    ? `translate(${S.zoomPanX}px, ${S.zoomPanY}px) scale(${level})`
+    : '';
   remoteEl.style.transformOrigin = 'center center';
 }
 
@@ -3428,6 +3450,8 @@ async function switchLens(index) {
     }
     S.cameraIndex = index;
     S.zoomLevel = 1.0;
+    S.zoomPanX = 0;
+    S.zoomPanY = 0;
     updateLensUI();
     await refreshTorchSupport();
   } catch { toast(TawnyT.t('w_toast_could_not_switch_lens')); }
@@ -3474,37 +3498,68 @@ function initPinch() {
   let p0 = null, p1 = null, zoomStart = 1.0;
   const dist = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
 
+  // One-finger drag re-centers the zoomed view instead of just always looking
+  // at the middle of the frame — only live once actually zoomed in, and only
+  // for the digital-fallback path: hardware zoom crops what the station's
+  // lens sends, and a phone lens has no pan/tilt motor to redirect.
+  let panFinger = null, panStart = null, panOrigin = null;
+
   vid.addEventListener('touchstart', (e) => {
-    if (e.touches.length !== 2 || S.role !== 'viewer') return;
-    p0 = { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
-    p1 = { clientX: e.touches[1].clientX, clientY: e.touches[1].clientY };
-    zoomStart = S.zoomLevel;
-    e.preventDefault();
+    if (S.role !== 'viewer') return;
+    if (e.touches.length === 2) {
+      panFinger = null;
+      p0 = { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
+      p1 = { clientX: e.touches[1].clientX, clientY: e.touches[1].clientY };
+      zoomStart = S.zoomLevel;
+      e.preventDefault();
+    } else if (e.touches.length === 1 && S.zoomLevel > 1.005 && !S.stationZoomSupported) {
+      panFinger = e.touches[0].identifier;
+      panStart = { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
+      panOrigin = { x: S.zoomPanX, y: S.zoomPanY };
+      e.preventDefault();
+    }
   }, { passive: false });
 
   vid.addEventListener('touchmove', (e) => {
-    if (e.touches.length !== 2 || p0 === null) return;
-    e.preventDefault();
-    const cur = dist(e.touches[0], e.touches[1]);
-    const start = dist(p0, p1);
-    const zoom = Math.min(Math.max(zoomStart * (cur / start), 1.0), 8.0);
-    S.zoomLevel = zoom;
-    showZoomChip(zoom);
-    // live digital zoom feedback while pinching (instant, no network round-trip)
-    if (!S.stationZoomSupported) applyDigitalZoomViewer(zoom);
-  }, { passive: false });
-
-  vid.addEventListener('touchend', () => {
-    if (p0 === null) return;
-    const sp = stationPeer();
-    if (S.stationZoomSupported) {
-      // station has hardware zoom — send signal, station applies it to the stream
-      if (sp) sig({ type: 'camera-control', zoom: S.zoomLevel, to: sp.id }, sp);
-    } else {
-      // digital fallback — viewer zooms their own view locally
+    if (e.touches.length === 2 && p0 !== null) {
+      e.preventDefault();
+      const cur = dist(e.touches[0], e.touches[1]);
+      const start = dist(p0, p1);
+      const zoom = Math.min(Math.max(zoomStart * (cur / start), 1.0), 8.0);
+      S.zoomLevel = zoom;
+      if (zoom <= 1.005) { S.zoomPanX = 0; S.zoomPanY = 0; }
+      showZoomChip(zoom);
+      // live digital zoom feedback while pinching (instant, no network round-trip)
+      if (!S.stationZoomSupported) applyDigitalZoomViewer(zoom);
+      return;
+    }
+    if (panFinger !== null) {
+      const t = Array.from(e.touches).find((x) => x.identifier === panFinger);
+      if (!t) return;
+      e.preventDefault();
+      S.zoomPanX = panOrigin.x + (t.clientX - panStart.clientX);
+      S.zoomPanY = panOrigin.y + (t.clientY - panStart.clientY);
       applyDigitalZoomViewer(S.zoomLevel);
     }
-    p0 = null; p1 = null;
+  }, { passive: false });
+
+  vid.addEventListener('touchend', (e) => {
+    if (e.touches.length < 2) {
+      if (p0 !== null) {
+        const sp = stationPeer();
+        if (S.stationZoomSupported) {
+          // station has hardware zoom — send signal, station applies it to the stream
+          if (sp) sig({ type: 'camera-control', zoom: S.zoomLevel, to: sp.id }, sp);
+        } else {
+          // digital fallback — viewer zooms their own view locally
+          applyDigitalZoomViewer(S.zoomLevel);
+        }
+      }
+      p0 = null; p1 = null;
+    }
+    if (![...e.touches].some((t) => t.identifier === panFinger)) {
+      panFinger = null; panStart = null; panOrigin = null;
+    }
   });
 }
 

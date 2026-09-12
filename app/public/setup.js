@@ -21,7 +21,9 @@ const ICONS = {
   tick: '<path d="M4 12.5 9 17.5 20 6.5"/>',
   bang: '<path d="M12 4 21.5 20H2.5Z"/><path d="M12 10v4.2"/><circle cx="12" cy="17.3" r=".3" fill="currentColor" stroke="none"/>',
   cross: '<path d="M6 6 18 18M18 6 6 18"/>',
-  out:  '<path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>'
+  out:  '<path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+  eye:    '<path d="M2 12s3.8-7 10-7 10 7 10 7-3.8 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+  eyeOff: '<path d="M2 12s3.8-7 10-7c2 0 3.7.6 5.1 1.5M22 12s-3.8 7-10 7c-2 0-3.7-.6-5.1-1.5"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/>'
 };
 
 function el(tag, attrs, ...kids) {
@@ -36,6 +38,11 @@ function el(tag, attrs, ...kids) {
 }
 
 const svg = (d, cls) => el('span', { class: cls || '', html: `<svg viewBox="0 0 24 24">${d}</svg>` });
+
+/** Eye / eye-off glyph for the auth-key reveal toggle. `shown` = key is currently visible. */
+function eyeIcon(shown) {
+  return svg(shown ? ICONS.eyeOff : ICONS.eye, 'join-reveal-icon');
+}
 
 /** An external link, always marked as one. */
 function goLink(href, label) {
@@ -390,10 +397,32 @@ let joinBusy = false;
 
 function joinForm(opts = {}) {
   const input = el('input', {
-    id: 'join-key', class: 'join-input', type: 'text',
+    id: 'join-key', class: 'join-input', type: 'password',
     placeholder: 'tskey-auth-…',
     autocomplete: 'off', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false'
   });
+
+  // Masked by default — this key can join a device to the tailnet, so it is
+  // treated like a password: hidden on screen, and uncopiable while hidden
+  // (the raw characters are still what a password field copies, dots or not,
+  // so masking alone does not stop a shoulder-surfed clipboard).
+  const revealBtn = el('button', {
+    id: 'join-reveal', class: 'join-reveal', type: 'button',
+    'aria-label': 'Show auth key', 'aria-pressed': 'false'
+  }, eyeIcon(false));
+  const blockWhileHidden = (e) => { if (input.type === 'password') e.preventDefault(); };
+  input.addEventListener('copy', blockWhileHidden);
+  input.addEventListener('cut', blockWhileHidden);
+  input.addEventListener('dragstart', blockWhileHidden);
+  revealBtn.addEventListener('click', () => {
+    const shown = input.type === 'password';
+    input.type = shown ? 'text' : 'password';
+    revealBtn.replaceChildren(eyeIcon(shown));
+    revealBtn.setAttribute('aria-label', shown ? 'Hide auth key' : 'Show auth key');
+    revealBtn.setAttribute('aria-pressed', String(shown));
+  });
+  const inputWrap = el('div', { class: 'join-input-wrap' }, input, revealBtn);
+
   const btn = el('button', { id: 'join-go', class: 'wide primary', type: 'submit' }, 'Connect');
   const msg = el('p', { id: 'join-msg', class: 'join-msg', hidden: 'hidden' });
 
@@ -405,7 +434,7 @@ function joinForm(opts = {}) {
 
   const form = el('form', { id: 'join-form', class: 'join' },
     el('label', { class: 'join-label', for: 'join-key' }, 'Paste your auth key'),
-    input, btn, resetBtn, msg);
+    inputWrap, btn, resetBtn, msg);
 
   const post = async (path, label) => {
     const key = input.value.trim();
@@ -896,7 +925,8 @@ function stepRoute(data) {
         el('ol', {},
           el('li', {}, `Find the machine called ${tailscale.dnsName ? tailscale.dnsName.split('.')[0] : 'tawny'} in the list.`),
           el('li', {}, 'Open its ⋯ menu and choose Edit route settings.'),
-          el('li', {}, `Tick ${cidr} and save.`))),
+          el('li', {}, `Tick ${cidr} and save.`),
+          el('li', {}, 'While you are in that ⋯ menu: also choose Disable key expiry. Tawny runs unattended — without this, Tailscale logs it out roughly every 180 days and remote access quietly stops until someone notices and pastes a fresh key.'))),
       goLink(LINK.machines, 'Open Tailscale machines'),
       copyRow(cidr),
       explain
