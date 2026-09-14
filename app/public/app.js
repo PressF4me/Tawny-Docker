@@ -2004,8 +2004,11 @@ function showViewerSas(code) {
       ? TawnyT.t('w_sas_viewer_note')
       : TawnyT.t('w_sas_viewer_fail');
   }
-  if (el.sasok) el.sasok.textContent = TawnyT.t('w_sas_looks_right');
-  if (el.sasno) el.sasno.textContent = TawnyT.t('w_sas_disconnect');
+  // No code means there is nothing to compare, so "Looks right" would be
+  // asking the user to vouch for something they cannot see. Same wording the
+  // Monitor uses for this case.
+  if (el.sasok) el.sasok.textContent = TawnyT.t(code ? 'w_sas_looks_right' : 'w_sas_keep_connected');
+  if (el.sasno) el.sasno.textContent = TawnyT.t(code ? 'w_sas_disconnect' : 'w_sas_disconnect_it');
   el.sas.hidden = false;
 }
 
@@ -2191,7 +2194,7 @@ function openSignal(base, tag) {
         return;
       }
       if (S.role === 'viewer' && !S.committedTag && entry.tag === 'lan' && !rendezvousBase()) {
-        return bail('This code only works on the same Wi-Fi as the other phone. Put both phones on the same Wi-Fi and try again.');
+        return bail(TawnyT.t('w_bail_wifi_only_code'));
       }
 
       if (S.nativeShell && S.role === 'viewer' && entry.retry === 6) tellNative('unreachable');
@@ -2635,7 +2638,11 @@ async function handle(m, entry) {
       if (S.role !== 'station') return;
       const p = S.peers.get(m.from);
       const now = Date.now();
-      if (now - (handle._chimeAt || 0) > 300) { handle._chimeAt = now; playChime(m.sound); }
+      // Rate-limited chimes are dropped, and a dropped chime gets no ack — the
+      // Viewer's "played on the Monitor" toast must not claim otherwise.
+      if (now - (handle._chimeAt || 0) <= 300) break;
+      handle._chimeAt = now;
+      playChime(m.sound);
       sig({ type: 'chime-ack', to: m.from, sound: m.sound }, p);
       break;
     }
@@ -2643,7 +2650,7 @@ async function handle(m, entry) {
       // Peer-controlled and optional: a missing `sound` used to throw here and
       // the confirmation toast just never appeared. It is also no longer echoed
       // back at the user — chimeLabel() only ever returns one of our own names.
-      toast(`${chimeLabel(m.sound)} played on the Monitor`);
+      toast(TawnyT.t('w_toast_chime_played', chimeLabel(m.sound)));
       break;
     }
     case 'talking': {
@@ -2681,7 +2688,7 @@ async function handle(m, entry) {
         S.remotePaused = m.paused;
         stageNote(m.paused ? TawnyT.t('w_note_monitor_paused_title') : null,
           TawnyT.t('w_note_monitor_paused_body'));
-        status(m.paused ? TawnyT.t('w_status_monitor_paused') : TawnyT.t('w_status_on_air'), m.paused ? 'warn' : 'live');
+        status(m.paused ? TawnyT.t('w_status_monitor_paused') : TawnyT.t('w_status_live'), m.paused ? 'warn' : 'live');
         if (!m.petName) break;
       }
       if (typeof m.petName !== 'string') break;
@@ -3334,9 +3341,9 @@ async function reassertTorch() {
 
 /** The one-line reason the key is inert, in the user's terms rather than ours. */
 function torchHint() {
-  if (!stationPeer()) return 'No monitor connected yet.';
-  if (S.torchFacing === 'user') return 'Switch the monitor to its back camera.';
-  return "The monitor's camera has no light.";
+  if (!stationPeer()) return TawnyT.t('w_toast_no_monitor_connected');
+  if (S.torchFacing === 'user') return TawnyT.t('w_torch_hint_back_camera');
+  return TawnyT.t('w_torch_hint_no_light');
 }
 
 function updateTorchUI() {
@@ -3351,7 +3358,7 @@ function updateTorchUI() {
   btn.setAttribute('aria-disabled', ok ? 'false' : 'true');
   press(btn, ok && S.torchOn);
   btn.querySelector('span:last-child').textContent =
-    ok && S.torchOn ? 'Light on' : 'Light';
+    ok && S.torchOn ? TawnyT.t('w_ctl_light_on') : TawnyT.t('w_ctl_light');
   btn.title = ok ? '' : torchHint();
 }
 
@@ -3986,6 +3993,9 @@ async function reacquireLocal() {
     }
     if (!S.local) S.local = new MediaStream();
     for (const t of fresh.getTracks()) S.local.addTrack(t);
+    // getUserMedia hands back a live mic. A Monitor muted before the phone
+    // dozed must stay muted, or it starts sending sound under a "muted" key.
+    for (const t of S.local.getAudioTracks()) t.enabled = S.micOn;
 
     // A fresh camera is a fresh answer to "which way round does it hand frames
     // back", and the phone may well have been turned while the app was away.
@@ -4024,12 +4034,18 @@ async function reacquireLocal() {
   }
 }
 
+// Registered once. The Android shell does not reload the page on hang-up, so
+// adding the listener per session stacked one more wake-lock request on every
+// foreground for each call the app had ever made.
+const grabWake = async () => { try { S.wake = await navigator.wakeLock.request('screen'); } catch {} };
+let wakeListening = false;
 async function keepAwake() {
   if (!('wakeLock' in navigator)) return;
-  const grab = async () => { try { S.wake = await navigator.wakeLock.request('screen'); } catch {} };
-  await grab();
+  await grabWake();
+  if (wakeListening) return;
+  wakeListening = true;
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && S.role === 'station') grab();
+    if (document.visibilityState === 'visible' && S.role === 'station') grabWake();
   });
 }
 
@@ -4065,7 +4081,7 @@ const setTalk = (on) => {
   if (S.role !== 'viewer' || !S.local) return;
   S.local.getAudioTracks().forEach((t) => { t.enabled = on; });
   btnTalk.classList.toggle('hot', on);
-  btnTalk.querySelector('span:last-child').textContent = on ? 'Talking' : 'Hold to talk';
+  btnTalk.querySelector('span:last-child').textContent = on ? TawnyT.t('w_ctl_talking') : TawnyT.t('w_hold_to_talk');
   const sp = stationPeer();
   if (sp) sig({ type: 'talking', to: sp.id, on }, sp);
 };
@@ -4255,9 +4271,13 @@ $('#btn-video').addEventListener('click', () => {
   // The far end's voice, if any is playing — #remote is muted (audio rides
   // #remote-audio instead, see its own note), so this is the only place a
   // recorded clip could get sound from.
+  //
+  // A clone, never the live track: onstop stops every track on this stream,
+  // and stopping the one #remote-audio is playing silenced the far end for
+  // the rest of the call.
   const audioTrack = v.srcObject?.getAudioTracks?.()[0]
     || el.remoteAudio.srcObject?.getAudioTracks?.()[0];
-  if (audioTrack) stream.addTrack(audioTrack);
+  if (audioTrack) stream.addTrack(audioTrack.clone());
 
   const chunks = [];
   const recorder = new MediaRecorder(stream, { mimeType: mime });
@@ -4266,7 +4286,7 @@ $('#btn-video').addEventListener('click', () => {
     cancelAnimationFrame(raf);
     stream.getTracks().forEach((t) => t.stop());
     press($('#btn-video'), false);
-    $('#btn-video').querySelector('span:last-child').textContent = 'Record';
+    $('#btn-video').querySelector('span:last-child').textContent = TawnyT.t('w_ctl_record');
     videoRec = null;
 
     const blob = new Blob(chunks, { type: mime });
@@ -4292,7 +4312,7 @@ $('#btn-video').addEventListener('click', () => {
 
   recorder.start();
   press($('#btn-video'), true);
-  toast(`Recording — up to ${VIDEO_MAX_MS / 1000}s`);
+  toast(TawnyT.t('w_toast_recording', VIDEO_MAX_MS / 1000));
 
   const startedAt = Date.now();
   const label = $('#btn-video').querySelector('span:last-child');
@@ -4359,7 +4379,7 @@ $('#btn-flip').addEventListener('click', async () => {
   // New camera, new answer to "does this one have a light?" — and S.facing has
   // moved, so the Viewer's hint can now say which way to flip it back.
   await refreshTorchSupport();
-  toast(S.facing === 'user' ? 'Front camera' : 'Rear camera');
+  toast(S.facing === 'user' ? TawnyT.t('w_toast_front_camera') : TawnyT.t('w_toast_rear_camera'));
   btn.disabled = false;
 });
 
@@ -4368,7 +4388,7 @@ $('#btn-mute').addEventListener('click', () => {
   S.local.getAudioTracks().forEach((t) => { t.enabled = S.micOn; });
   const btn = $('#btn-mute');
   press(btn, !S.micOn);
-  btn.querySelector('span:last-child').textContent = S.micOn ? 'Mute mic' : 'Unmute mic';
+  btn.querySelector('span:last-child').textContent = S.micOn ? TawnyT.t('w_ctl_mute_mic') : TawnyT.t('w_ctl_unmute_mic');
 });
 
 // Viewer: silence what plays back here. Purely local — the Monitor keeps

@@ -156,6 +156,22 @@ function findStep(startup, name) {
   return null;
 }
 
+/**
+ * The newest entry for each step. The startup log is append-only, so reading
+ * every entry kept a failure that was since fixed (a bad auth key, retried)
+ * counting against the setup for ever. Same rule as findStep().
+ */
+function latestSteps(startup) {
+  if (!Array.isArray(startup)) return [];
+  const seen = new Map();
+  const loose = [];   // an entry with no step name has nothing to supersede it
+  for (const s of startup) {
+    if (!s) continue;
+    if (s.step) seen.set(s.step, s); else loose.push(s);
+  }
+  return [...seen.values(), ...loose];
+}
+
 async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
@@ -951,6 +967,16 @@ function stepDevices(data) {
   const ready = tailscale.loggedIn && !(tailscale.pendingRoutes || []).length
     && ((tailscale.approvedRoutes || []).length || (tailscale.routeCoveredBy || []).length);
 
+  // "This Wi-Fi only" advertises no route by design, so the test above can
+  // never pass there — and nothing on this step applies: subnet routes are
+  // exactly what that answer turned down. Settled the same way step 3 settles
+  // it, so this cannot sit on "after the steps above" under a "ready" banner.
+  const carried = (tailscale.approvedRoutes || []).length || (tailscale.routeCoveredBy || []).length;
+  if (tailscale.loggedIn && !carried && !tailscale.routesEnabled
+      && tailscale.routeChoice && tailscale.routeChoice !== 'unset') {
+    return { state: 'done', title: 'Put your devices on the network', tag: 'this Wi-Fi only' };
+  }
+
   const peers = (tailscale.peers || []).filter((p) => p.name);
   const peerBox = peers.length
     ? el('div', { class: 'peers' }, ...peers.map((p) =>
@@ -997,7 +1023,7 @@ function stepWatch(data) {
   const ready = tailscale.loggedIn && tailscale.reachable && tailscale.dnsName
     && !(tailscale.pendingRoutes || []).length
     && serveState(tailscale) !== false
-    && !(data.startup || []).some((s) => s.ok === false);
+    && !latestSteps(data.startup).some((s) => s.ok === false);
 
   if (!ready) {
     return { state: 'todo', title: 'Start watching', tag: 'once the steps above are done' };
