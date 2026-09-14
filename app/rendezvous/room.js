@@ -15,51 +15,31 @@
 //
 // Uses the WebSocket Hibernation API so an idle room costs nothing.
 
-// 1 Watcher + up to 3 Handhelds. Three is the product's answer, not a tunable:
-// it is the same number in public/app.js (MAX_VIEWERS), LocalWeb.kt, server.js
-// and the Deno port, and there is no setting, query param or header that moves
-// it. A fourth Handheld is turned away with 4003 and told why.
-const MAX_PER_ROOM = 4;
-const MAX_STATIONS = 1;
-// Addressed control messages the relay will forward.
-//
-// Must list every addressed `type` public/app.js sends through sig(). A missing
-// type is dropped in silence — no error, the feature just never happens on this
-// transport. That has bitten twice: `cameras`, `meta` and `camera-control` (lens
-// picker, remote zoom, pet-name sync), and then `torch`, which left the Viewer's
-// Light key greyed out on a phone whose LED works fine. Keep this in step with
-// LocalWeb.kt and server.js.
-const RELAY = new Set([
-  'offer', 'answer', 'ice', 'bye', 'chime', 'chime-ack', 'talking',
-  'cameras', 'meta', 'camera-control', 'torch', 'battery'
-]);
-const TICKET_TTL_MS = 24 * 60 * 60 * 1000;
-// The idle TTL above is rolled forward while a Monitor is sitting in the room
-// (see alarm()), because a Monitor plugged in and left alone is the product's
-// whole premise and expiring the ticket out from under it locked every new
-// Handheld out with 4008. That roll-forward had no ceiling, so for the normal
-// case — a Monitor that stays up — the ticket never expired at all, and a
-// pairing link photographed off someone's screen stayed valid indefinitely.
-//
-// So the roll-forward is now bounded: a ticket lives at most this long from the
-// moment it was first registered, however long the Monitor stays up. Reaching
-// it means new Handhelds must be re-paired; sessions already connected are not
-// touched, because the ticket is only consulted at admission. A Monitor that
-// reconnects re-registers the *same* stored ticket, which deliberately does not
-// restart this clock — only a genuinely new ticket (a different hashT, i.e. a
-// re-paired channel) does. This is the bound SECURITY.md quotes.
-const TICKET_MAX_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
+import {
+  ADMIT_TIMEOUT_MS, CLOSE, MAX_MSG, MAX_PER_ROOM, MAX_STATIONS, RELAY,
+  TICKET_MAX_LIFETIME_MS, TICKET_TTL_MS, beyondLifetime, issuedAt, rollTicket
+} from './protocol.js';
 
-/** When this ticket was first registered, reconstructed for pre-`iss` records. */
-const issuedAt = (rec) => rec.iss ?? (rec.exp - TICKET_TTL_MS);
-/** Past the absolute ceiling, regardless of how often it has been rolled on. */
-const beyondLifetime = (rec) => Date.now() - issuedAt(rec) >= TICKET_MAX_LIFETIME_MS;
+// The room caps, relayed message types, close codes and the ticket clock live in
+// ./protocol.js, shared with ../server.js and deno/main.ts. They used to be
+// copied into each, and drifted.
+//
+// On the ticket clock: the idle TTL is rolled forward while a Monitor is sitting
+// in the room (see alarm()), because a Monitor plugged in and left alone is the
+// product's whole premise and expiring the ticket out from under it locked every
+// new Handheld out with 4008. That roll-forward is bounded by
+// TICKET_MAX_LIFETIME_MS from first registration, however long the Monitor stays
+// up. Reaching it means new Handhelds must be re-paired; sessions already
+// connected are not touched, because the ticket is only consulted at admission.
+// A Monitor that reconnects re-registers the *same* stored ticket, which
+// deliberately does not restart that clock — only a genuinely new ticket (a
+// different hashT, i.e. a re-paired channel) does. This is the bound SECURITY.md
+// quotes.
+
 const HEX64 = /^[a-f0-9]{64}$/;
 // A socket that connects and never says hello held a slot forever: pending
 // sockets are excluded from members(), so MAX_PER_ROOM never stopped them.
-const ADMIT_TIMEOUT_MS = 10_000;
-// Signalling frames are a few KB. Anything larger is someone filling memory.
-const MAX_MSG = 64 * 1024;
+// Hence ADMIT_TIMEOUT_MS, swept in alarm().
 // Wrong answers, per room, before this room stops entertaining new sockets.
 const MAX_FAILED_ADMITS = 20;
 const FAIL_WINDOW_MS = 10 * 60 * 1000;
@@ -84,7 +64,12 @@ export class Room {
     if (!rec) return null;
     // Two independent clocks: the idle TTL, and the absolute ceiling that the
     // roll-forward in alarm() may not cross.
-    if (Date.now() > rec.exp || beyondLifetime(rec)) return null;
+    if (beyondLifetime(rec)) return null;
+    // Past the idle TTL but the Monitor is still here: alarm() is about to roll
+    // it forward (it wakes a minute after exp), so do not turn Handhelds away
+    // with 4008 in that window.
+    if (Date.now() > rec.exp && !this.members()
+      .some((w) => w.deserializeAttachment()?.role === 'station')) return null;
     return rec;
   }
 
@@ -141,7 +126,7 @@ export class Room {
 
   async webSocketMessage(ws, raw) {
     if (typeof raw === 'string' ? raw.length > MAX_MSG : raw.byteLength > MAX_MSG) {
-      ws.close(4009, 'message too large'); return;
+      ws.close(...CLOSE.TOO_LARGE); return;
     }
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
@@ -158,14 +143,14 @@ export class Room {
     // way out, locking every paired Viewer to 4008 until the 24h TTL expired.
     // Nothing that gets rejected may change stored state.
     if (meta.pending) {
-      if (msg.type !== 'hello') { ws.close(4000, 'expected hello'); return; }
-      if (await this.tooManyFailures()) { ws.close(4029, 'too many attempts'); return; }
+      if (msg.type !== 'hello') { ws.close(...CLOSE.EXPECTED_HELLO); return; }
+      if (await this.tooManyFailures()) { ws.close(...CLOSE.TOO_MANY_ATTEMPTS); return; }
 
       const rec = await this.ticket();
       const here = this.members();
 
       // 1. Capacity first — a refused socket must be a no-op.
-      if (here.length >= MAX_PER_ROOM) { ws.close(4003, 'channel full'); return; }
+      if (here.length >= MAX_PER_ROOM) { ws.close(...CLOSE.FULL); return; }
 
       // The Monitor's own key beats a ghost Monitor.
       //
@@ -193,7 +178,7 @@ export class Room {
         if (stations.length >= MAX_STATIONS) {
           const proof = typeof msg.a === 'string' && HEX64.test(msg.a) ? msg.a : null;
           if (!(rec?.auth && proof === rec.auth)) {
-            ws.close(4004, 'monitor already running'); return;
+            ws.close(...CLOSE.MONITOR_RUNNING); return;
           }
           evict = stations;
         }
@@ -229,17 +214,17 @@ export class Room {
         // Monitor's QR was walking their own channel into 4029 "too many
         // attempts" — locked out of their own room for doing nothing wrong.
         // Nobody being home is not an attack on the door.
-        if (!rec) { ws.close(4010, 'monitor offline'); return; }
+        if (!rec) { ws.close(...CLOSE.MONITOR_OFFLINE); return; }
         // A ticket that genuinely does not match this room still counts.
         if ((await sha256Hex(msg.t)) !== rec.hashT) {
           await this.noteFailure();
-          ws.close(4008, 'pairing expired'); return;
+          ws.close(...CLOSE.PAIRING_EXPIRED); return;
         }
       } else {
         const claimed = typeof msg.a === 'string' && HEX64.test(msg.a) ? msg.a : null;
         if (rec?.auth && claimed && claimed !== rec.auth) {
           await this.noteFailure();
-          ws.close(4008, 'wrong channel key'); return;
+          ws.close(...CLOSE.WRONG_KEY); return;
         }
         // A channel this build has claimed cannot be re-keyed by a caller that
         // cannot prove the key. Older shells are still admitted below on a
@@ -253,11 +238,11 @@ export class Room {
         } else if (rec) {
           if ((await sha256Hex(msg.t)) !== rec.hashT) {
             await this.noteFailure();
-            ws.close(4008, 'pairing expired'); return;
+            ws.close(...CLOSE.PAIRING_EXPIRED); return;
           }
         } else {
           await this.noteFailure();
-          ws.close(4008, 'no pairing ticket'); return;
+          ws.close(...CLOSE.NO_TICKET); return;
         }
       }
 
@@ -284,7 +269,7 @@ export class Room {
       for (const w of evict) {
         const m = w.deserializeAttachment();
         if (m?.id) for (const p of peers) send(p, { type: 'peer-left', id: m.id });
-        try { w.close(4005, 'replaced by owner'); } catch {}
+        try { w.close(...CLOSE.REPLACED); } catch {}
       }
 
       const id = hex(crypto.getRandomValues(new Uint8Array(6)));
@@ -331,7 +316,7 @@ export class Room {
     for (const w of this.state.getWebSockets()) {
       const m = w.deserializeAttachment();
       if (m?.pending && (m.since || 0) < cutoff) {
-        try { w.close(4008, 'no hello'); } catch {}
+        try { w.close(...CLOSE.NO_HELLO); } catch {}
       }
     }
 
@@ -344,9 +329,7 @@ export class Room {
     // is by definition still current, so roll it forward instead.
     const stationHere = this.members()
       .some((w) => w.deserializeAttachment()?.role === 'station');
-    if (stationHere && !beyondLifetime(rec)) {
-      rec.iss = issuedAt(rec);        // pin it, so pre-`iss` records get a clock
-      rec.exp = Date.now() + TICKET_TTL_MS;
+    if (rollTicket(rec, stationHere) === 'rolled') {
       await this.state.storage.put('ticket', rec);
       // Wake again either at the next idle expiry or at the ceiling, whichever
       // comes first, so the ticket is actually dropped when its life is up

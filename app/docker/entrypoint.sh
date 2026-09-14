@@ -557,12 +557,24 @@ if [ -n "$ts_sock" ] && [ "$ts_state" = Running ]; then
 		    // No output, or a CLI too old for --json: assume free, which is
 		    // exactly what this script did before the check existed.
 		    if (!j) return process.stdout.write("0");
-		    const mine = "http://127.0.0.1:" + process.argv[1];
+		    // Parse the target rather than compare strings: the CLI stores a
+		    // normalised form, and a trailing slash or a localhost / [::1]
+		    // spelling of our own mount read as somebody else'"'"'s — so a restart
+		    // in host-socket mode refused to re-publish Tawny'"'"'s own config, and
+		    // tryServe() skips host mode, leaving /setup failed. Same rule as
+		    // isMine() in server.js.
+		    const mine = (u) => {
+		      try {
+		        const p = new URL(String(u || ""));
+		        return ["127.0.0.1", "localhost", "[::1]", "::1"].includes(p.hostname)
+		          && p.port === String(process.argv[1]);
+		      } catch { return false; }
+		    };
 		    let other = false;
 		    for (const t of Object.values(j.TCP || {})) if (t && t.TCPForward) other = true;
 		    for (const host of Object.values(j.Web || {}))
 		      for (const h of Object.values((host && host.Handlers) || {}))
-		        if (!h || h.Proxy !== mine) other = true;
+		        if (!h || !mine(h.Proxy)) other = true;
 		    process.stdout.write(other ? "1" : "0");
 		  });
 		' "$PORT" 2>/dev/null || echo 0)"

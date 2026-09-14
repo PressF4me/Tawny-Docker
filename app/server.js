@@ -15,6 +15,10 @@ import { randomUUID, createHash, createHmac } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import { PRIVACY_HTML, PRIVACY_HEADERS } from './rendezvous/privacy.js';
 import {
+  ADMIT_TIMEOUT_MS, CLOSE, MAX_MSG, MAX_PER_ROOM, MAX_STATIONS, RELAY,
+  TICKET_TTL_MS, issuedAt, rollTicket, ticketLive
+} from './rendezvous/protocol.js';
+import {
   findRouteConflicts, findRouteCoverage, mergeRoutes, withoutRoute
 } from './docker/route-conflict.js';
 
@@ -126,11 +130,10 @@ function cacheAuthKey(key) {
   try { writeFileSync(TS_AUTHKEY_CACHE, key, { mode: 0o600 }); } catch { /* best effort */ }
 }
 
-const MAX_PER_ROOM = 4;      // one Watcher + up to three Handhelds
-const MAX_STATIONS = 1;
+// MAX_PER_ROOM, MAX_STATIONS, MAX_MSG (also the ws maxPayload below) and
+// ADMIT_TIMEOUT_MS come from rendezvous/protocol.js, shared with both clouds.
 const MAX_PER_IP = 6;
 const MAX_TOTAL = 64;
-const MAX_MSG = 64 * 1024;   // enforced by the ws maxPayload below, too
 const AUTH_FAILS = 8;        // per IP before lockout
 const AUTH_WINDOW = 10 * 60_000;
 // Distinct room ids this process will track at once. LocalWeb.kt has always had
@@ -143,8 +146,7 @@ const MAX_ROOMS = 256;
 // that pongs politely and never speaks held a slot indefinitely — eleven hosts
 // at MAX_PER_IP would wedge MAX_TOTAL and take the whole relay down. The LAN
 // relay sweeps these after 5 s and the Durable Object after 10 s; this had no
-// sweep at all.
-const ADMIT_TIMEOUT_MS = 10_000;
+// sweep at all. The timeout itself is ADMIT_TIMEOUT_MS in rendezvous/protocol.js.
 
 const ROOM_RE = /^[a-f0-9]{32}$/;
 const PUBLIC = join(fileURLToPath(new URL('.', import.meta.url)), 'public');
@@ -1330,30 +1332,15 @@ const perIP = new Map();
 const tickets = new Map();
 const sha256hex = (s) => createHash('sha256').update(String(s)).digest('hex');
 const HEX64 = /^[a-f0-9]{64}$/;
-const TICKET_TTL = 24 * 60 * 60_000;
-// Absolute ceiling on a ticket's life, mirroring rendezvous/room.js. A Monitor
-// re-registers the same stored ticket every time it reconnects, which would
-// otherwise push the idle TTL out indefinitely and leave a leaked pairing link
-// valid forever. Re-registering the same hashT keeps the original issue time;
-// only a re-paired channel (a different hashT) starts a new lifetime.
-const TICKET_MAX_LIFETIME = 30 * 24 * 60 * 60_000;
-const issuedAt = (rec) => rec.iss ?? (rec.exp - TICKET_TTL);
-const ticketLive = (rec) =>
-  !!rec && Date.now() <= rec.exp && Date.now() - issuedAt(rec) < TICKET_MAX_LIFETIME;
+// The ticket clock — idle TTL, the 30-day ceiling, and rolling it forward under
+// a connected Monitor — lives in rendezvous/protocol.js, shared with room.js and
+// the Deno port so the three relays cannot disagree about when a pairing ends.
 const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MSG });
 
 // Every relayed type is addressed. Peer ids come from the server, so a client
-// cannot blind-broadcast into a channel it has joined.
-//
-// Must list every addressed `type` public/app.js sends through sig(): a type
-// missing here is dropped in silence and its feature simply never happens on
-// this transport. This list had fallen four types behind the client — the lens
-// picker, remote zoom, pet-name sync and the Light key were all being discarded
-// here. Keep it in step with LocalWeb.kt and rendezvous/room.js.
-const RELAY = new Set([
-  'offer', 'answer', 'ice', 'bye', 'chime', 'chime-ack', 'talking',
-  'cameras', 'meta', 'camera-control', 'torch', 'battery'
-]);
+// cannot blind-broadcast into a channel it has joined. The list itself is RELAY
+// in rendezvous/protocol.js — it had fallen four types behind the client here
+// once already. Keep that in step with LocalWeb.kt.
 
 // ------------------------------------------------------- the LAN bridge
 //
@@ -1506,7 +1493,7 @@ wss.on('connection', (ws, req, ctx) => {
 
   // Say hello or go away. Cleared on admission and on close.
   ws.admitTimer = setTimeout(() => {
-    if (ws.meta.pending) { noteFail(ip); try { ws.close(4008, 'no hello'); } catch {} }
+    if (ws.meta.pending) { noteFail(ip); try { ws.close(...CLOSE.NO_HELLO); } catch {} }
   }, ADMIT_TIMEOUT_MS);
   ws.admitTimer.unref?.();
 
@@ -1527,8 +1514,8 @@ wss.on('connection', (ws, req, ctx) => {
     // rendezvous/room.js — registering the ticket for a socket that is then
     // turned away let a caller who knew only the room id re-key the channel on
     // its way out, locking every paired Handheld to 4008 until the TTL expired.
-    if (peers.size >= MAX_PER_ROOM) return ws.close(4003, 'channel full');
-    if (!rooms.has(room) && rooms.size >= MAX_ROOMS) return ws.close(4005, 'busy');
+    if (peers.size >= MAX_PER_ROOM) return ws.close(...CLOSE.FULL);
+    if (!rooms.has(room) && rooms.size >= MAX_ROOMS) return ws.close(...CLOSE.BUSY);
     let evict = [];
     if (role === 'station') {
       const stations = [...peers.values()].filter((p) => p.meta.role === 'station');
@@ -1536,7 +1523,7 @@ wss.on('connection', (ws, req, ctx) => {
         // A Watcher whose network dropped is still on the books until the
         // heartbeat notices. Only the holder of the channel key may take the
         // room back from it; everyone else keeps getting 4004.
-        if (!(rec?.auth && proof === rec.auth)) return ws.close(4004, 'monitor already running');
+        if (!(rec?.auth && proof === rec.auth)) return ws.close(...CLOSE.MONITOR_RUNNING);
         evict = stations;
       }
     }
@@ -1549,22 +1536,22 @@ wss.on('connection', (ws, req, ctx) => {
       // Telling that person "your pairing code expired" sends them back to
       // rescan the same QR, for ever, which is exactly the loop reported. 4010
       // says the true thing, and public/app.js has its own sentence for it.
-      if (REQUIRE_TICKET && !rec) return ws.close(4010, 'monitor offline');
-      if (REQUIRE_TICKET && sha256hex(msg.t) !== rec.hashT) return ws.close(4008, 'pairing expired');
+      if (REQUIRE_TICKET && !rec) return ws.close(...CLOSE.MONITOR_OFFLINE);
+      if (REQUIRE_TICKET && sha256hex(msg.t) !== rec.hashT) return ws.close(...CLOSE.PAIRING_EXPIRED);
     } else { // station
-      if (rec?.auth && proof && proof !== rec.auth) return ws.close(4008, 'wrong channel key');
+      if (rec?.auth && proof && proof !== rec.auth) return ws.close(...CLOSE.WRONG_KEY);
       const mayRekey = proof !== null || !rec?.auth;
       const hashT = typeof msg.hashT === 'string' && HEX64.test(msg.hashT) ? msg.hashT : null;
       if (hashT && mayRekey) {
         register = {
           hashT, auth: proof || rec?.auth || null,
           iss: rec && rec.hashT === hashT ? issuedAt(rec) : Date.now(),
-          exp: Date.now() + TICKET_TTL
+          exp: Date.now() + TICKET_TTL_MS
         };
       } else if (rec) {
-        if (sha256hex(msg.t) !== rec.hashT) return ws.close(4008, 'pairing expired');
+        if (sha256hex(msg.t) !== rec.hashT) return ws.close(...CLOSE.PAIRING_EXPIRED);
       } else if (REQUIRE_TICKET) {
-        return ws.close(4008, 'no pairing ticket');
+        return ws.close(...CLOSE.NO_TICKET);
       }
     }
 
@@ -1577,7 +1564,7 @@ wss.on('connection', (ws, req, ctx) => {
     for (const p of evict) {
       peers.delete(p.meta.id);
       for (const peer of peers.values()) send(peer, { type: 'peer-left', id: p.meta.id });
-      p.close(4005, 'replaced by owner');
+      p.close(...CLOSE.REPLACED);
     }
 
     ws.meta.pending = false;
@@ -1600,7 +1587,7 @@ wss.on('connection', (ws, req, ctx) => {
     if (!msg || typeof msg !== 'object') return;
 
     if (ws.meta.pending) {
-      if (msg.type !== 'hello') return ws.close(4000, 'expected hello');
+      if (msg.type !== 'hello') return ws.close(...CLOSE.EXPECTED_HELLO);
       return admit(msg);
     }
     if (!RELAY.has(msg.type) || typeof msg.to !== 'string') return;
@@ -1644,7 +1631,14 @@ const heartbeat = setInterval(() => {
   }
   const now = Date.now();
   for (const [ip, rec] of fails) if (now > rec.until) fails.delete(ip);
-  for (const [room, rec] of tickets) if (!ticketLive(rec)) tickets.delete(room);
+  // While a room's Monitor is connected its ticket is rolled forward, as
+  // rendezvous/room.js's alarm() does. Without it a Monitor on a socket that
+  // never dropped saw its ticket lapse after 24h, and every new Handheld was
+  // turned away with 4008 until the phone happened to reconnect.
+  for (const [room, rec] of tickets) {
+    const stationHere = [...(rooms.get(room)?.values() || [])].some((p) => p.meta.role === 'station');
+    if (rollTicket(rec, stationHere, now) === 'drop') tickets.delete(room);
+  }
 }, 30_000);
 heartbeat.unref?.();
 

@@ -101,7 +101,7 @@ services:
       #
       # /setup asks once and will not call the deployment finished until you
       # answer, so leaving this alone does not quietly cost you remote access.
-      TS_ROUTES: "${TS_ROUTES:-off}"
+      TS_ROUTES: "${TS_ROUTES-off}"
       # "off" to skip `tailscale serve`, for a deployment already behind a proxy
       # that terminates TLS.
       TS_SERVE: "${TS_SERVE:-on}"

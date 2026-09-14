@@ -68,7 +68,7 @@ services:
       # off by default: see docker-compose.yml. /setup turns it on live and
       # remembers the answer, and will not call the deployment finished
       # until you have answered one way or the other.
-      TS_ROUTES: "${TS_ROUTES:-off}"
+      TS_ROUTES: "${TS_ROUTES-off}"
       TS_SERVE: "${TS_SERVE:-on}"
       # All optional; leave blank. The container derives its own address from
       # each request and generates its TURN secret at startup. See DESIGN.md.

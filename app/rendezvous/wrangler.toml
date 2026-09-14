@@ -45,6 +45,11 @@ TURN_MODE = "auto"
 # Extra allowed WebSocket origins (comma separated). 127.0.0.1 / localhost are
 # always allowed; add your web deployment's origin here if you host one.
 ALLOWED_ORIGINS = ""
+# Self-hosted coturn fallback (use-auth-secret), used only when Cloudflare
+# Realtime TURN is not configured. Comma separated, e.g.
+#   "turn:turn.example.net:3478,turns:turn.example.net:5349"
+# Empty = off. Also needs the TURN_STATIC_SECRET secret (see below).
+TURN_URLS = ""
 
 # --- secrets (do NOT put these here; use `wrangler secret put NAME`) ----------
 # Read key for GET /report/pull — a long random string:
@@ -57,4 +62,4 @@ ALLOWED_ORIGINS = ""
 #   wrangler secret put TURN_API_TOKEN
 # Fallback — self-hosted coturn (use-auth-secret):
 #   wrangler secret put TURN_STATIC_SECRET      # matches coturn static-auth-secret
-#   set TURN_URLS in [vars] above, e.g. "turn:turn.example.net:3478,turns:turn.example.net:5349"
+#   then fill in TURN_URLS in [vars] above

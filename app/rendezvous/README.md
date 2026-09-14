@@ -19,7 +19,7 @@ recommended one** (no server to keep alive).
 
 ## Option A — Cloudflare Workers + Durable Objects (recommended)
 
-Files: `worker.js`, `room.js`, `wrangler.toml`.
+Files: `worker.js`, `room.js`, `protocol.js` (shared with `../server.js` and `deno/main.ts`), `privacy.js`, `reports.js`, `wrangler.toml`.
 
 ### 1. Create the project
 
