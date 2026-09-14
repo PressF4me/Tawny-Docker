@@ -1926,8 +1926,10 @@ function syncStationSas() {
   S.sasAsk = ask ? ask.id : null;
 
   if (!ask) {
+    const wasUp = !el.sas.hidden;
     el.sas.hidden = true;
     el.sas.classList.remove('sas--warn');
+    if (wasUp) maybeCoach();   // the first-call tour waits behind this card
     return;
   }
 
@@ -2477,7 +2479,7 @@ function updateStatus() {
     // A paused Monitor is still "connected" — the picture just stopped. Saying
     // "Live" over a frozen frame is the lie this whole path exists to stop.
     if (S.remotePaused && st === 'connected') return status(TawnyT.t('w_status_monitor_paused'), 'warn');
-    if (st === 'connected') status(TawnyT.t('w_status_live'), 'live');
+    if (st === 'connected') { status(TawnyT.t('w_status_live'), 'live'); maybeCoach(); }
     else if (st === 'connecting' || st === 'new') status(TawnyT.t('w_status_connecting'), 'on');
     else if (!sp) status(TawnyT.t('w_status_monitor_offline'), null);
     else status(TawnyT.t('w_status_reconnecting'), null);
@@ -2489,6 +2491,7 @@ function updateStatus() {
   const live = vs.filter((p) => p.pc?.connectionState === 'connected').length;
   // The count lives in the rail's phone glyph now, not in words here.
   status(live ? TawnyT.t('w_status_on_air') : TawnyT.t('w_status_connecting'), live ? 'live' : 'on');
+  if (live) maybeCoach();
 }
 
 function updatePeerChip() {
@@ -4462,6 +4465,7 @@ $('#sas-ok')?.addEventListener('click', () => {
   if (!el.sas.classList.contains('sas--warn')) markSasReviewed(el.sascode.textContent);
   el.sas.hidden = true;
   el.saschip.hidden = true;
+  maybeCoach();
 });
 $('#sas-no')?.addEventListener('click', () => {
   if (S.role === 'station') {
@@ -4476,9 +4480,16 @@ $('#sas-no')?.addEventListener('click', () => {
 
 // ---------------------------------------------------------------- theme
 
-// 'system' → follow prefers-color-scheme; 'light' / 'dark' → force it.
+// What "system" means right now, as told by the native shell ('light' |
+// 'dark'), or null in a plain browser. A WebView's prefers-color-scheme follows
+// the app's *forced* night mode rather than the phone's, so inside the shell
+// "Follow system" has to be resolved by the side that can actually see it.
+let shellSystemTheme = null;
+
+// 'system' → follow the device; 'light' / 'dark' → force it.
 function applyTheme(mode) {
   const root = document.documentElement;
+  if (mode === 'system' && shellSystemTheme) mode = shellSystemTheme;
   if (mode === 'light' || mode === 'dark') root.dataset.theme = mode;
   else root.removeAttribute('data-theme');
 }
@@ -4514,35 +4525,171 @@ try {
 // Set from the toggle (and mirrored from the native shell). Applies instantly —
 // pure CSS custom properties, so it works mid-session too.
 window.tawnySetTheme = (mode) => {
+  if (!THEME_ORDER.includes(mode)) mode = 'system';
   try { localStorage.setItem('tawny.theme', mode); } catch {}
   applyTheme(mode);
+  paintThemeToggle();
   // Persist on the native side so it survives an app restart.
   try { androidNative?.post(JSON.stringify({ event: 'theme', mode })); } catch {}
+};
+/**
+ * The shell's answer to "what is the phone set to?" changed (or is being given
+ * for the first time). Repaints only — the user's choice stays what it was, so
+ * a phone flipping to dark at sunset never quietly pins the app to dark.
+ */
+window.tawnySystemTheme = (resolved) => {
+  shellSystemTheme = resolved === 'dark' ? 'dark' : 'light';
+  applyTheme(savedTheme());
+  paintThemeToggle();
 };
 applyTheme(savedTheme());
 
 // A small cycle toggle, top-right (moves above the controls during a live
-// session). In the native shell it's Light ↔ Dark; in a browser, +System.
+// session): Follow system → Light → Dark, the same three the native shell offers.
+const THEME_ORDER = ['system', 'light', 'dark'];
+const THEME_GLYPH = { system: '◐', light: '☀', dark: '☾' };
+function themeLabel(m) {
+  return TawnyT.t(m === 'dark' ? 'w_theme_dark' : m === 'light' ? 'w_theme_light' : 'w_theme_system');
+}
+function paintThemeToggle() {
+  const btn = document.getElementById('theme-toggle');
+  if (!btn) return;
+  const m = THEME_ORDER.includes(savedTheme()) ? savedTheme() : 'system';
+  btn.textContent = THEME_GLYPH[m];
+  btn.title = themeLabel(m);
+  btn.setAttribute('aria-label', `${TawnyT.t('w_theme_change')} — ${themeLabel(m)}`);
+}
 function initThemeToggle() {
-  const order = (window.TawnyNative || window.webkit?.messageHandlers?.tawny)
-    ? ['light', 'dark'] : ['system', 'light', 'dark'];
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.id = 'theme-toggle';
-  btn.setAttribute('aria-label', 'Change theme');
-  const paint = () => {
-    let m = savedTheme();
-    if (!order.includes(m)) m = 'dark';
-    btn.textContent = m === 'dark' ? '☾' : m === 'light' ? '☀' : '◐';
-    btn.title = `Theme: ${m}`;
-  };
   btn.addEventListener('click', () => {
-    const cur = order.includes(savedTheme()) ? savedTheme() : order[0];
-    window.tawnySetTheme(order[(order.indexOf(cur) + 1) % order.length]);
-    paint();
+    const cur = THEME_ORDER.includes(savedTheme()) ? savedTheme() : 'system';
+    const next = THEME_ORDER[(THEME_ORDER.indexOf(cur) + 1) % THEME_ORDER.length];
+    window.tawnySetTheme(next);
+    // Say what it is now: "Follow system" looks identical to whichever of
+    // light or dark the phone happens to be in, so the glyph alone can't.
+    toast(themeLabel(next), 1600);
   });
-  paint();
   document.body.appendChild(btn);
+  paintThemeToggle();
+}
+
+// ------------------------------------------------------------ coach marks
+
+/**
+ * The first-call walkthrough: a spotlight on each of the keys that matter,
+ * one at a time, with a line on what it does. Shown once per role, on the
+ * first moment the call is actually up — before that the keys either do
+ * nothing yet or sit under the shell's pairing sheet. Skippable at any step,
+ * and tapping anywhere moves on, so it never stands between someone and
+ * their pet for longer than they let it.
+ */
+const COACH_STEPS = {
+  viewer: [
+    ['#btn-talk', 'w_coach_talk'],
+    ['#btn-chime', 'w_coach_chime'],
+    ['#btn-torch', 'w_coach_light'],
+    ['#btn-snap', 'w_coach_snap'],
+    ['#btn-leave', 'w_coach_leave'],
+  ],
+  station: [
+    ['#btn-dim', 'w_coach_dim'],
+    ['#btn-flip', 'w_coach_flip'],
+    ['#btn-stop', 'w_coach_stop'],
+  ],
+};
+const coachKey = (role) => `tawny.coach.${role}.v1`;
+let coachSeenByShell = [];   // roles the native shell has on record as shown
+function coachSeen(role) {
+  if (coachSeenByShell.includes(role)) return true;
+  try { return !!localStorage.getItem(coachKey(role)); } catch { return false; }
+}
+function markCoachSeen(role) {
+  try { localStorage.setItem(coachKey(role), '1'); } catch {}
+  try { androidNative?.post(JSON.stringify({ event: 'coachDone', role })); } catch {}
+}
+
+let coachOn = false;
+// The safety-code card comes first: the tour waits until it has been answered
+// (the #sas-ok / #sas-no handlers and syncStationSas call maybeCoach again).
+const sasUp = () => !el.sas.hidden;
+function maybeCoach() {
+  const role = S.role;
+  if (coachOn || !COACH_STEPS[role] || coachSeen(role)) return;
+  if (document.body.classList.contains('dimmed') || sasUp()) return;
+  // Give the picture a moment to land before anything is drawn over it.
+  setTimeout(() => {
+    if (coachOn || S.role !== role || coachSeen(role)) return;
+    if (document.body.classList.contains('dimmed') || el.live.hidden || sasUp()) return;
+    const steps = COACH_STEPS[role]
+      .map(([sel, key]) => [document.querySelector(sel), key])
+      .filter(([node]) => node && !node.hidden && node.offsetParent !== null);
+    if (steps.length) runCoach(role, steps);
+  }, 1400);
+}
+
+function runCoach(role, steps) {
+  coachOn = true;
+  const wrap = document.createElement('div');
+  wrap.className = 'coach';
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-live', 'polite');
+  wrap.innerHTML =
+    '<div class="coach-ring"></div>' +
+    '<div class="coach-bubble"><p class="coach-text"></p>' +
+    '<div class="coach-row"><span class="coach-count"></span>' +
+    '<button type="button" class="coach-skip"></button>' +
+    '<button type="button" class="coach-next"></button></div></div>';
+  document.body.appendChild(wrap);
+  const ring = wrap.querySelector('.coach-ring');
+  const bubble = wrap.querySelector('.coach-bubble');
+  const next = wrap.querySelector('.coach-next');
+  const skip = wrap.querySelector('.coach-skip');
+  skip.textContent = TawnyT.t('w_coach_skip');
+  let i = 0;
+
+  const place = () => {
+    const [node, key] = steps[i];
+    const r = node.getBoundingClientRect();
+    const pad = 6;
+    Object.assign(ring.style, {
+      left: `${r.left - pad}px`, top: `${r.top - pad}px`,
+      width: `${r.width + pad * 2}px`, height: `${r.height + pad * 2}px`,
+    });
+    wrap.querySelector('.coach-text').textContent = TawnyT.t(key);
+    wrap.querySelector('.coach-count').textContent = `${i + 1} / ${steps.length}`;
+    next.textContent = TawnyT.t(i === steps.length - 1 ? 'w_coach_done' : 'w_coach_next');
+    // Above the key when it sits in the lower half (the control bar), below it
+    // otherwise, and kept inside the screen either way.
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const bw = Math.min(300, vw - 24);
+    bubble.style.width = `${bw}px`;
+    bubble.style.left = `${Math.max(12, Math.min(vw - bw - 12, r.left + r.width / 2 - bw / 2))}px`;
+    if (r.top > vh / 2) { bubble.style.top = ''; bubble.style.bottom = `${vh - r.top + pad + 12}px`; }
+    else { bubble.style.bottom = ''; bubble.style.top = `${r.bottom + pad + 12}px`; }
+  };
+  // Once is once, even if the call drops mid-tour — except when the safety-code
+  // card cuts in, which hides the tour; that one runs again after the card.
+  const end = (shown = true) => {
+    if (shown) markCoachSeen(role);
+    coachOn = false;
+    window.removeEventListener('resize', place);
+    wrap.remove();
+  };
+  const advance = () => { if (++i >= steps.length) end(); else place(); };
+
+  next.addEventListener('click', (e) => { e.stopPropagation(); advance(); });
+  skip.addEventListener('click', (e) => { e.stopPropagation(); end(); });
+  wrap.addEventListener('click', () => advance());
+  window.addEventListener('resize', place);
+  // A call that ends, or a screen that dims, takes the tour with it.
+  const watch = setInterval(() => {
+    if (!coachOn) return clearInterval(watch);
+    if (sasUp()) { clearInterval(watch); end(false); return; }
+    if (el.live.hidden || document.body.classList.contains('dimmed')) { clearInterval(watch); end(); }
+  }, 500);
+  place();
 }
 
 // --------------------------------------------------------------- init
@@ -4553,10 +4700,16 @@ function initThemeToggle() {
 window.tawnyStart = function (role, key, name, signalUrl, rendezvousUrl, token, opts) {
   if (!key || !/^[A-Za-z0-9_-]{16,64}$/.test(key)) return false;
   S.nativeShell = true;
-  if (opts && opts.theme) {
-    try { localStorage.setItem('tawny.theme', opts.theme); } catch {}
-    applyTheme(opts.theme);
+  if (opts && (opts.systemTheme === 'light' || opts.systemTheme === 'dark')) {
+    shellSystemTheme = opts.systemTheme;
   }
+  if (opts && opts.theme) {
+    const mode = THEME_ORDER.includes(opts.theme) ? opts.theme : 'system';
+    try { localStorage.setItem('tawny.theme', mode); } catch {}
+    applyTheme(mode);
+    paintThemeToggle();
+  }
+  if (opts && Array.isArray(opts.coachSeen)) coachSeenByShell = opts.coachSeen;
   // The shell's own Animations switch. A WebView derives
   // prefers-reduced-motion from the system animator scale, so it cannot see an
   // app-level setting deliberately kept separate from the system one — the

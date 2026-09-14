@@ -1098,9 +1098,13 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .talk-fab {
   display: none;
   position: absolute;
-  left: 50%;
+  /* Centred with margins, not translateX(-50%): the press and the motion-off
+     rules below set `transform` outright, and a centring transform gets
+     wiped with it — the key jumped half its width to the right on hold. */
+  left: 0;
+  right: 0;
+  margin-inline: auto;
   bottom: 34px;
-  transform: translateX(-50%);
   z-index: 14;
   width: 68px;
   height: 68px;
@@ -1132,7 +1136,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   white-space: nowrap;
 }
 
-.talk-fab:active { transform: translateX(-50%) scale(.94); }
+.talk-fab:active { transform: scale(.94); }
 
 /* held: filled in --live, with a slow halo pulsing off the ring so the
    microphone being open reads at a glance, not just on close inspection. */
@@ -2344,4 +2348,51 @@ body.dimmed #theme-toggle { display: none; }
 body:has(#live:not([hidden])) #theme-toggle {
   top: auto;
   bottom: calc(84px + var(--safe-b));
+}
+
+/* ------------------------------------------------------------ coach marks
+   The first-call walkthrough (runCoach() in app.js): a ring cut out of a dim
+   veil around one key, and a bubble saying what it does. The veil is the
+   ring's own spread shadow, so there is one element to move, not four. */
+.coach {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  cursor: pointer;
+}
+.coach-ring {
+  position: fixed;
+  border-radius: calc(var(--r-ctl) + 6px);
+  box-shadow: 0 0 0 2px var(--berry), 0 0 0 9999px rgba(8, 7, 10, .62);
+  transition: left .28s ease, top .28s ease, width .28s ease, height .28s ease;
+  pointer-events: none;
+}
+.coach-bubble {
+  position: fixed;
+  padding: 14px 16px 10px;
+  background: var(--panel);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: 0 14px 34px -14px rgba(12, 13, 18, .55);
+  animation: coach-in .26s ease-out;
+  cursor: default;
+}
+.coach-text { margin: 0 0 8px; font-size: 15px; line-height: 1.45; }
+.coach-row { display: flex; align-items: center; gap: 6px; }
+.coach-count { flex: 1; font-size: 12px; color: var(--dim); letter-spacing: .04em; }
+.coach-row button {
+  min-height: 40px;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 14px;
+  border-radius: var(--r-ctl);
+  border: 0;
+  cursor: pointer;
+}
+.coach-skip { background: transparent; color: var(--dim); }
+.coach-next { background: var(--berry); color: var(--on-accent); font-weight: 600; }
+@keyframes coach-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
 }

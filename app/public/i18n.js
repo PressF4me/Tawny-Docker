@@ -12,6 +12,23 @@
 
   const DICT = {
     en: {
+      // --- theme toggle ---
+      w_theme_change: 'Change theme',
+      w_theme_system: 'Theme: follow system',
+      w_theme_light: 'Theme: light',
+      w_theme_dark: 'Theme: dark',
+      // --- first-call walkthrough ---
+      w_coach_talk: 'Hold this to talk to your pet. Let go and the room stops hearing you.',
+      w_coach_chime: 'Play a sound on the Monitor — a squeaky toy, a meow, a bell — to call them over.',
+      w_coach_light: 'Turn on the Monitor’s light to see into a dark room.',
+      w_coach_snap: 'Save a photo of what the Monitor sees right now.',
+      w_coach_leave: 'Hang up here. The Monitor keeps watching, so you can look in again any time.',
+      w_coach_dim: 'Once a phone is watching, dim the screen. The stream keeps running and the battery lasts far longer.',
+      w_coach_flip: 'Switch between the front and back camera.',
+      w_coach_stop: 'Stop monitoring. Viewers can’t look in until you start again.',
+      w_coach_next: 'Next',
+      w_coach_done: 'Got it',
+      w_coach_skip: 'Skip',
       // --- live controls (static markup) ---
       w_ctl_chime: 'Chime',
       w_ctl_light: 'Light',
@@ -107,6 +124,23 @@
     },
 
     es: {
+      // --- theme toggle ---
+      w_theme_change: 'Cambiar tema',
+      w_theme_system: 'Tema: según el sistema',
+      w_theme_light: 'Tema: claro',
+      w_theme_dark: 'Tema: oscuro',
+      // --- first-call walkthrough ---
+      w_coach_talk: 'Mantén pulsado para hablarle a tu mascota. Al soltar, la habitación deja de oírte.',
+      w_coach_chime: 'Reproduce un sonido en el Monitor — un juguete, un maullido, una campana — para llamarla.',
+      w_coach_light: 'Enciende la luz del Monitor para ver en una habitación oscura.',
+      w_coach_snap: 'Guarda una foto de lo que ve el Monitor ahora mismo.',
+      w_coach_leave: 'Cuelga aquí. El Monitor sigue vigilando, así que puedes volver a mirar cuando quieras.',
+      w_coach_dim: 'Cuando un teléfono esté mirando, oscurece la pantalla. La transmisión sigue y la batería dura mucho más.',
+      w_coach_flip: 'Cambia entre la cámara frontal y la trasera.',
+      w_coach_stop: 'Deja de vigilar. Nadie podrá mirar hasta que vuelvas a empezar.',
+      w_coach_next: 'Siguiente',
+      w_coach_done: 'Entendido',
+      w_coach_skip: 'Omitir',
       w_ctl_chime: 'Timbre',
       w_ctl_light: 'Luz',
       w_ctl_my_camera: 'Mi cámara',
