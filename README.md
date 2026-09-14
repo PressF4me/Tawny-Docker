@@ -173,9 +173,11 @@ docker build --network=host -t ghcr.io/pressf4me/tawny:latest .
 docker compose up -d         # picks up the local image (pull_policy: missing)
 ```
 
-`app/` is a snapshot of the app's server (`server.js`, `public/`, `rendezvous/`,
-`docker/`) from the Tawny app repo; `tools/tawny-sync` refreshes it and writes
-the source commit to `app/.source-commit`. `--network=host` matters only if your
+`app/public/` is a snapshot of the web client from the Tawny app repo (the same
+bundle that ships inside the APK); `tools/tawny-sync` refreshes only that folder
+and writes the source commit to `app/.source-commit`. Everything else in `app/`
+— `server.js`, `docker/`, `rendezvous/`, `package*.json` — lives in this repo.
+`--network=host` matters only if your
 Docker bridge can't reach the internet during `apk add` (a Tailscale/Mullvad
 nftables symptom).
 

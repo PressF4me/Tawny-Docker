@@ -637,9 +637,20 @@ if [ "$TURN_EMBEDDED" = on ] && command -v turnserver >/dev/null 2>&1; then
 	# the real address); behind a port-forward the operator sets
 	# TAWNY_PUBLIC_IP and we pass it here so relay candidates carry the address
 	# that is actually reachable rather than a private one.
+	# The secret goes in a config file, not argv: a --static-auth-secret CLI
+	# flag sits in /proc/<pid>/cmdline (what `ps` prints) for any local user to
+	# read for the life of the process, which defeats generating a fresh one
+	# per start in the first place. No -n alongside -c: -n tells coturn to skip
+	# every config file, which would drop the secret and leave TURN without auth.
+	TURN_CONF_FILE="$RUN_DIR/turnserver.conf"
+	{
+		printf 'use-auth-secret\n'
+		printf 'static-auth-secret=%s\n' "$(cat "$TURN_SECRET_FILE")"
+	} >"$TURN_CONF_FILE"
+	chmod 600 "$TURN_CONF_FILE"
 	set -- \
-		-n --no-cli --no-tls --no-dtls \
-		--use-auth-secret --static-auth-secret="$(cat "$TURN_SECRET_FILE")" \
+		-c "$TURN_CONF_FILE" \
+		--no-cli --no-tls --no-dtls \
 		--realm=tawny \
 		--listening-port="$TURN_PORT" \
 		--min-port="$TURN_MIN_PORT" --max-port="$TURN_MAX_PORT" \

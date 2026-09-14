@@ -397,6 +397,16 @@ elif docker exec "$name" test -f /tmp/tawny/turn-secret 2>/dev/null; then
 		"turnutils_uclient -y -t -u probe -W \"\$(cat /tmp/tawny/turn-secret)\" -e ${lan_ip:-127.0.0.1} -n 2 ${lan_ip:-127.0.0.1} -p $turnport" \
 		2>&1 | grep -q 'Total lost packets 0'; then
 		echo "ok    embedded turn    allocation + relay round-trip"
+		# ...and it relays ONLY with that secret. A coturn that lost its auth
+		# config (e.g. -n beside -c) falls back to no-auth and passes the check
+		# above, while quietly being an open relay on every interface.
+		if docker exec "$name" sh -c \
+			"timeout 15 turnutils_uclient -y -t -u probe -W not-the-secret -e ${lan_ip:-127.0.0.1} -n 2 ${lan_ip:-127.0.0.1} -p $turnport" \
+			2>&1 | grep -q 'Total lost packets 0'; then
+			echo "FAIL  embedded turn    coturn relayed with a WRONG secret — it is an open relay"; fail=1
+		else
+			echo "ok    embedded turn    wrong secret refused"
+		fi
 	else
 		echo "FAIL  embedded turn    coturn did not relay with the generated secret"; fail=1
 	fi
