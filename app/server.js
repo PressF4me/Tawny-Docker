@@ -218,6 +218,10 @@ const CSP = [
   "style-src 'self'",
   "img-src 'self' data: blob:",
   "media-src 'self' blob:",
+  // The web client ships its own Mukta and brush-script woff2 files; without
+  // this, default-src 'none' blocks them and every page falls back to system
+  // fonts (index.html's meta policy allows them, but the header wins).
+  "font-src 'self'",
   `connect-src ${CONNECT_SRC}`,
   "manifest-src 'self'",
   "base-uri 'none'",
