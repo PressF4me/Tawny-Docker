@@ -1162,7 +1162,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
   position: absolute;
   left: 8px;
   right: 8px;
-  bottom: calc(84px + var(--safe-b));
+  /* Opens above the hold-to-talk key, not over it: the control row (~84px),
+     then .talk-fab's bottom:34px + 68px, then a 10px gap. Sat at the top of
+     the control row, the tray's second row landed exactly where the key
+     floats, and the key (z-index 14) drew over the middle chime. The z-index
+     keeps the open tray over #lens-bar too, which it can meet on a
+     multi-camera Monitor. */
+  bottom: calc(84px + 34px + 68px + 10px + var(--safe-b));
+  z-index: 16;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -1354,6 +1361,8 @@ body.dimmed #theme-toggle { display: none; }
 
 @media (min-width: 720px) {
   .controls { gap: 6px; padding: 9px 10px calc(9px + var(--safe-b)); }
+  /* the taller row pushes .talk-fab up with it; keep the tray above the key */
+  .chimes { bottom: calc(100px + 34px + 68px + 10px + var(--safe-b)); }
   .ctl { font-size: 13px; padding: 3px 2px 4px; }
   .ctl .ico { height: 40px; max-width: 72px; }
   .ctl .ico svg { width: 28px; height: 28px; }
