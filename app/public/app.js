@@ -1793,8 +1793,13 @@ const SAS_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';   // Crockford base32
 // text, which a relay can pad with a decoy session-level a=fingerprint line.
 async function negotiatedFingerprints(pc) {
   const stats = await pc.getStats();
+  // Prefer the transport whose DTLS is actually up: an unbundled or restarted
+  // connection can list more than one, and the last one is not always it.
   let transport;
-  stats.forEach((r) => { if (r.type === 'transport') transport = r; });
+  stats.forEach((r) => {
+    if (r.type !== 'transport') return;
+    if (!transport || (r.dtlsState === 'connected' && transport.dtlsState !== 'connected')) transport = r;
+  });
   if (!transport) return null;
   const cert = (id) => {
     let out;
@@ -1824,9 +1829,14 @@ async function computeSas(peer) {
   return `${s.slice(0, 3)}-${s.slice(3)}`;
 }
 
-const SAS_TRIES = 25;          // ~10s at 400ms — DTLS is usually up inside 2s
+// Counted from the moment the connection is up, not from the answer: a call
+// that needs the TURN relay can spend 10s+ in ICE, and a budget that started
+// with the answer ran out just as DTLS finished and raised a false tamper
+// alarm on a good call. Before that the wait is bounded only by SAS_WAIT_MS.
+const SAS_TRIES = 12;          // ~5s at 400ms once connected
+const SAS_WAIT_MS = 60000;     // ICE gets this long before the code is given up on
 
-async function showSas(peer, attempt = 0) {
+async function showSas(peer, attempt = 0, since = Date.now()) {
   if (peer.transport?.tag !== 'cloud') return;   // LAN needs no SAS
   let code;
   try { code = await computeSas(peer); }
@@ -1839,9 +1849,11 @@ async function showSas(peer, attempt = 0) {
   // to silently show no chip at all, and the Handheld flashed "connection may
   // be tampered with" over a perfectly good call.
   const pcState = peer.pc?.connectionState;
-  if (!code && attempt < SAS_TRIES && pcState !== 'failed' && pcState !== 'closed') {
+  const up = pcState === 'connected';
+  if (!code && pcState !== 'failed' && pcState !== 'closed'
+      && (up ? attempt < SAS_TRIES : Date.now() - since < SAS_WAIT_MS)) {
     clearTimeout(peer.sasTimer);
-    peer.sasTimer = setTimeout(() => showSas(peer, attempt + 1), 400);
+    peer.sasTimer = setTimeout(() => showSas(peer, up ? attempt + 1 : 0, since), 400);
     return;
   }
   if (!code) diag(`sas unavailable after ${attempt} tries (pc=${pcState})`);
