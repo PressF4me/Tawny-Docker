@@ -1,3 +1,11 @@
+> [!NOTE]
+> **Built with AI.** Tawny, including this container, is made by its
+> maintainer working with Claude, an AI model made by Anthropic. Most of the
+> code, documentation and artwork here was written with Claude, under the
+> maintainer's direction. Some people avoid AI-built software for ethical,
+> political, professional or personal reasons, so you should know that before
+> you install, run or contribute.
+
 # Tawny Docker
 
 Run your own Tawny — the two-way pet monitor — as a container on a box at home.
@@ -7,6 +15,24 @@ Tailscale.
 **A pet monitor with no paywalls.** No subscription, no locked features, no ads,
 nothing hosted by anyone else. You point an old phone at the pet and watch from
 a browser; the only thing that ever sees the stream is you.
+
+<p align="center">
+  <img src="docs/media/screenshot-01.jpg" width="200" alt="Your pet, live on your phone">
+  <img src="docs/media/screenshot-02.jpg" width="200" alt="Pair with one photo">
+  <img src="docs/media/screenshot-03.jpg" width="200" alt="See, hear and talk back">
+  <img src="docs/media/screenshot-04.jpg" width="200" alt="Private by design">
+</p>
+<p align="center">
+  <img src="docs/media/screenshot-05.jpg" width="200" alt="One stays home, one comes along">
+  <img src="docs/media/screenshot-06.jpg" width="200" alt="Dim the screen, keep listening">
+  <img src="docs/media/screenshot-07.jpg" width="200" alt="Back in one tap">
+  <img src="docs/media/screenshot-08.jpg" width="200" alt="Light or dark">
+</p>
+<p align="center">
+  <sub>Shown on the Android app. The page this container serves is the same
+  web client, so a browser Viewer looks and works the same way.</sub><br>
+  <a href="https://github.com/PressF4me/Tawny-Pet-Monitor-APK/blob/master/docs/media/demo.mp4"><b>▶ Watch the setup video</b></a> (79 s)
+</p>
 
 **What this is mainly for: a bridge.** The Monitor phone runs the Tawny Android
 app, pointed at your pet. Whoever's watching doesn't need the app at all — they
