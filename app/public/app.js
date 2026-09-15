@@ -1806,11 +1806,25 @@ async function negotiatedFingerprints(pc) {
     stats.forEach((r) => { if (r.type === 'certificate' && r.id === id) out = r; });
     return out;
   };
-  const l = cert(transport.localCertificateId);
-  const rm = cert(transport.remoteCertificateId);
-  if (!l?.fingerprint || !rm?.fingerprint) return null;
   const norm = (c) => `${(c.fingerprintAlgorithm || 'sha-256').toLowerCase()} ${c.fingerprint.toUpperCase()}`;
-  return [norm(l), norm(rm)].sort();
+  const l = cert(transport.localCertificateId);
+  if (!l?.fingerprint || transport.dtlsState !== 'connected') return null;
+  const rm = cert(transport.remoteCertificateId);
+  if (rm?.fingerprint) return [norm(l), norm(rm)].sort();
+  // Some WebView builds never report the remote certificate — seen on a Monitor
+  // in a live call: DTLS connected, localCertificateId set, no remoteCertificateId
+  // and no second certificate entry at all — so the code could never be computed
+  // and every internet call raised the tamper alarm. DTLS is only `connected`
+  // once the peer's certificate matched the remote description's fingerprint, so
+  // that fingerprint is the negotiated one — provided the description names
+  // exactly one. More than one distinct value is the decoy case: fail closed.
+  const lines = (pc.remoteDescription?.sdp || '').match(/^a=fingerprint:\S+ [0-9A-Fa-f:]+/gm) || [];
+  const seen = [...new Set(lines.map((x) => {
+    const [alg, fp] = x.slice('a=fingerprint:'.length).split(' ');
+    return norm({ fingerprintAlgorithm: alg, fingerprint: fp });
+  }))];
+  if (seen.length !== 1) return null;
+  return [norm(l), seen[0]].sort();
 }
 
 async function computeSas(peer) {
