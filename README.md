@@ -31,8 +31,7 @@ a browser; the only thing that ever sees the stream is you.
 <p align="center">
   <sub>The /setup page, laptop and phone-browser shots are captures of this repo's
   server in a real browser (tailnet and device names replaced with placeholders).
-  The other three show the Android app, which uses the same web client.</sub><br>
-  <a href="https://github.com/PressF4me/Tawny-Pet-Monitor-APK/blob/master/docs/media/demo.mp4"><b>▶ Watch the setup video</b></a> (79 s)
+  The other three show the Android app, which uses the same web client.</sub>
 </p>
 
 **What this is mainly for: a bridge.** The Monitor phone runs the Tawny Android
