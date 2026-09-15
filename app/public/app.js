@@ -1851,7 +1851,10 @@ const SAS_TRIES = 12;          // ~5s at 400ms once connected
 const SAS_WAIT_MS = 60000;     // ICE gets this long before the code is given up on
 
 async function showSas(peer, attempt = 0, since = Date.now()) {
-  if (peer.transport?.tag !== 'cloud') return;   // LAN needs no SAS
+  if (peer.transport?.tag !== 'cloud') {          // LAN needs no SAS
+    if (!attempt) diag(`sas skipped: transport=${peer.transport?.tag || 'none'}`);
+    return;
+  }
   let code;
   try { code = await computeSas(peer); }
   catch { code = null; }
@@ -1870,7 +1873,9 @@ async function showSas(peer, attempt = 0, since = Date.now()) {
     peer.sasTimer = setTimeout(() => showSas(peer, up ? attempt + 1 : 0, since), 400);
     return;
   }
-  if (!code) diag(`sas unavailable after ${attempt} tries (pc=${pcState})`);
+  diag(code
+    ? `sas ready after ${attempt} tries (pc=${pcState})`
+    : `sas unavailable after ${attempt} tries (pc=${pcState}, waited ${Math.round((Date.now() - since) / 1000)}s)`);
 
   // Settled. A null here is now a *result*, not "not asked yet", and both roles
   // must treat it as an alarm rather than as nothing to say.
@@ -2012,6 +2017,7 @@ function showViewerSas(code) {
   // attack (see sasFailedViewers) — still logged by showSas either way, just
   // not interrupted over.
   if (sasReviewed()) {
+    diag('sas card skipped: channel already reviewed');
     el.sas.hidden = true;
     el.sas.classList.remove('sas--warn', 'sas--gate');
     el.saschip.hidden = true;
@@ -2038,6 +2044,7 @@ function showViewerSas(code) {
   if (el.sasok) el.sasok.textContent = TawnyT.t(code ? 'w_sas_looks_right' : 'w_sas_keep_connected');
   if (el.sasno) el.sasno.textContent = TawnyT.t(code ? 'w_sas_disconnect' : 'w_sas_disconnect_it');
   el.sas.hidden = false;
+  diag(`sas card shown (${code ? 'code' : 'warn'})`);
 }
 
 function wsURLFor(base) {

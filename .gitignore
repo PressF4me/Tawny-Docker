@@ -11,3 +11,6 @@ app/rendezvous/.wrangler/
 
 # Local bug log — not published.
 Bugs/
+
+# Local compose hardening — names this machine's tailnet and LAN addresses.
+docker-compose.override.yml
