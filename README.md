@@ -18,19 +18,20 @@ a browser; the only thing that ever sees the stream is you.
 
 <p align="center">
   <img src="docs/media/screenshot-01.jpg" width="200" alt="Your pet, live on your phone">
-  <img src="docs/media/screenshot-02.jpg" width="200" alt="Pair with one photo">
+  <img src="docs/media/screenshot-02.jpg" width="200" alt="Set it up from a browser: docker compose, then the /setup checklist">
   <img src="docs/media/screenshot-03.jpg" width="200" alt="See, hear and talk back">
-  <img src="docs/media/screenshot-04.jpg" width="200" alt="Private by design">
+  <img src="docs/media/screenshot-04.jpg" width="200" alt="Watch from a laptop browser, nothing to install">
 </p>
 <p align="center">
-  <img src="docs/media/screenshot-05.jpg" width="200" alt="One stays home, one comes along">
+  <img src="docs/media/screenshot-05.jpg" width="200" alt="A browser can be the Monitor too">
   <img src="docs/media/screenshot-06.jpg" width="200" alt="Dim the screen, keep listening">
-  <img src="docs/media/screenshot-07.jpg" width="200" alt="Back in one tap">
-  <img src="docs/media/screenshot-08.jpg" width="200" alt="Light or dark">
+  <img src="docs/media/screenshot-07.jpg" width="200" alt="Talk back and ring a chime from a phone browser">
+  <img src="docs/media/screenshot-08.jpg" width="200" alt="Runs on your own box: the compose file">
 </p>
 <p align="center">
-  <sub>Shown on the Android app. The page this container serves is the same
-  web client, so a browser Viewer looks and works the same way.</sub><br>
+  <sub>The /setup page, laptop and phone-browser shots are captures of this repo's
+  server in a real browser (tailnet and device names replaced with placeholders).
+  The other three show the Android app, which uses the same web client.</sub><br>
   <a href="https://github.com/PressF4me/Tawny-Pet-Monitor-APK/blob/master/docs/media/demo.mp4"><b>▶ Watch the setup video</b></a> (79 s)
 </p>
 
