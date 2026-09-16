@@ -214,8 +214,8 @@ Releases build from a `vX.Y.Z` tag via `.github/workflows/release.yml` —
 
 ## Supporting it
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/A6N425ZWFE)
-[![Tip in Bitcoin](docs/media/lightning-button.png)](https://strike.me/@loustrikes)
+<a href="https://ko-fi.com/A6N425ZWFE"><img src="https://ko-fi.com/img/githubbutton_sm.svg" height="30" alt="Support me on Ko-fi"></a>
+<a href="https://strike.me/@loustrikes"><img src="docs/media/lightning-button.png" height="30" alt="Tip in Bitcoin"></a>
 
 Tawny is free: no ads, no account, no paywall, nothing locked. Chipping in
 unlocks nothing — every feature is there for everyone either way. These are the
