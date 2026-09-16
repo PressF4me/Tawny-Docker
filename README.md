@@ -215,9 +215,12 @@ Releases build from a `vX.Y.Z` tag via `.github/workflows/release.yml` —
 ## Supporting it
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/A6N425ZWFE)
+[![Tip in Bitcoin](docs/media/lightning-button.png)](https://strike.me/@loustrikes)
 
-Tawny is free: no ads, no account, no paywall, nothing locked. Donations unlock
-nothing — every feature is there for everyone either way.
+Tawny is free: no ads, no account, no paywall, nothing locked. Chipping in
+unlocks nothing — every feature is there for everyone either way. These are the
+same two buttons the app shows; anything else asking for money in Tawny's name
+isn't us.
 
 ---
 
