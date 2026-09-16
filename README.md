@@ -212,6 +212,12 @@ Releases build from a `vX.Y.Z` tag via `.github/workflows/release.yml` —
 
 ---
 
+## License
+
+MIT — see [`LICENSE`](LICENSE). Use it, fork it, ship it; keep the copyright
+notice. The owlet mascot and the Tawny name are the one exception: they are the
+app's identity on the Play Store, so please use your own if you publish a fork.
+
 ## Design
 
 `DESIGN.md` — why it's shaped this way, what the shipped Android app can and
