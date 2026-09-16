@@ -212,6 +212,15 @@ Releases build from a `vX.Y.Z` tag via `.github/workflows/release.yml` —
 
 ---
 
+## Supporting it
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/A6N425ZWFE)
+
+Tawny is free: no ads, no account, no paywall, nothing locked. Donations unlock
+nothing — every feature is there for everyone either way.
+
+---
+
 ## License
 
 MIT — see [`LICENSE`](LICENSE). Use it, fork it, ship it; keep the copyright
