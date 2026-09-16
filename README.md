@@ -34,9 +34,19 @@ a browser; the only thing that ever sees the stream is you.
   The other three show the Android app, which uses the same web client.</sub>
 </p>
 
-**What this is mainly for: a bridge.** The Monitor phone runs the Tawny Android
-app, pointed at your pet. Whoever's watching doesn't need the app at all — they
-open the `https://…ts.net` address this container publishes, in a plain
+<p align="center">
+  <a href="https://github.com/PressF4me/Tawny-Pet-Monitor-APK">
+    <img src="https://img.shields.io/badge/Get_the_app-Tawny_Pet_Monitor_APK-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Tawny Pet Monitor — the Android app repo">
+  </a>
+  <br>
+  <sub>The Monitor phone runs the <b><a href="https://github.com/PressF4me/Tawny-Pet-Monitor-APK">Tawny Android app</a></b> —
+  source, releases and the security model live there.</sub>
+</p>
+
+**What this is mainly for: a bridge.** The Monitor phone runs the [Tawny Android
+app](https://github.com/PressF4me/Tawny-Pet-Monitor-APK), pointed at your pet.
+Whoever's watching doesn't need the app at all — they open the
+`https://…ts.net` address this container publishes, in a plain
 browser, on anything signed into your tailnet: a laptop, someone else's phone,
 a shared family tablet. No app store, no install, no account, for them. That's
 the point of running this at all — the app download that's easy for you is a
@@ -232,5 +242,6 @@ app's identity on the Play Store, so please use your own if you publish a fork.
 
 ## Design
 
-`DESIGN.md` — why it's shaped this way, what the shipped Android app can and
+`DESIGN.md` — why it's shaped this way, what the shipped
+[Android app](https://github.com/PressF4me/Tawny-Pet-Monitor-APK) can and
 can't be made to do, and what was measured.
