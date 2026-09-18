@@ -6,7 +6,7 @@
 > political, professional or personal reasons, so you should know that before
 > you install, run or contribute.
 
-# Tawny Docker
+# 🦉 Tawny Docker
 
 Run your own Tawny — the two-way pet monitor — as a container on a box at home.
 No account, no domain, no port forwarding, no certificates. It runs over your
@@ -43,7 +43,7 @@ a browser; the only thing that ever sees the stream is you.
   source, releases and the security model live there.</sub>
 </p>
 
-## Supporting it
+## 🤗 Supporting it
 
 <a href="https://ko-fi.com/A6N425ZWFE"><img src="https://ko-fi.com/img/githubbutton_sm.svg" height="30" alt="Support me on Ko-fi"></a>
 <a href="https://strike.me/@loustrikes"><img src="docs/media/lightning-button.png" height="30" alt="Tip in Bitcoin"></a>
@@ -77,7 +77,7 @@ only file you need from this repo is `docker-compose.yml`.
 
 ---
 
-## Setup
+## 👷 Setup
 
 Once. After this, watching is: open the app on the phone, open a URL on the
 Viewer, scan.
@@ -124,7 +124,7 @@ volume, the route follows the LAN.
 
 ---
 
-## Watching
+## 👀 Watching
 
 1. **Monitor phone** — open Tawny, choose **Monitor**, allow the camera, let it
    show its pairing code. Servers screen stays blank.
@@ -142,7 +142,7 @@ into each pairing code; a lease change breaks the code and forces a rescan.
 
 ---
 
-## Checking it
+## ✅ Checking it
 
 ```sh
 bash probe.sh
@@ -157,7 +157,7 @@ first so the relay check can bind port 3478.
 
 ---
 
-## Ports
+## 🌐 Ports
 
 | Port | What |
 |---|---|
@@ -168,7 +168,7 @@ No HTTPS port on the container. TLS is Tailscale's.
 
 ---
 
-## If something is wrong
+## ☠️ If something is wrong
 
 Open `http://<box>:8099/setup` first — it diagnoses most of this and names the
 next step.
@@ -188,7 +188,7 @@ next step.
 
 ---
 
-## No Tailscale?
+## 😸 No Tailscale?
 
 The app still serves on the LAN at `http://<box>:8099` and two devices on that
 Wi-Fi can pair and watch — but no talk-back (needs HTTPS) and no way in from
@@ -196,7 +196,7 @@ outside. Tailscale is how this is meant to run; LAN-only is a fallback.
 
 ---
 
-## For tighter privacy [advanced]
+## 🤓 For tighter privacy [advanced]
 
 Everything above leans on Tailscale: its coordination server, its `ts.net`
 certificate, and public STUN from Google and Cloudflare, with fallbacks that keep
@@ -222,7 +222,7 @@ the phone side, and it only trusts certificates from public CAs.
 
 ---
 
-## Two ways to self-host
+## ✌️ Two ways to self-host
 
 This container is the bridge: the app as the Monitor, and a **browser Viewer**
 — any device, no install — over your Tailscale. It works the other way and
@@ -235,7 +235,7 @@ are independent and can run together.
 
 ---
 
-## Building it yourself
+## 🫵 Building it yourself
 
 The published image is the supported path. To build locally — a fork, an
 unreleased change, an air-gapped registry:
