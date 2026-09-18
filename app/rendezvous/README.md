@@ -4,6 +4,13 @@
 different networks; see `../Tawny Docker/` instead if you want a browser Viewer
 over your own Tailscale.
 
+> **This folder is the deployed Worker.** `wrangler deploy` runs from here
+> (`Tawny Docker/app/rendezvous`), and nowhere else. In a Tawny Android checkout,
+> `rendezvous/` is an untracked symlink to this folder, so the probes and docs
+> there read the same code. There used to be a separate, untracked copy in the
+> Android folder. It drifted behind this one and was the source of the live
+> Worker until 2026-09-18.
+
 The one always-on piece Tawny needs for **remote** (off-Wi-Fi) monitoring. It is
 a signaling *introducer* only — it never sees a video frame and never sees the
 channel key. Devices only ever dial **out** to it over `wss:443`, so no inbound
