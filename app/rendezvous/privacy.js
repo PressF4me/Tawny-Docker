@@ -19,7 +19,7 @@
 //   deno/main.ts     (Deno Deploy alternative)
 //   ../server.js     (self-host reference)
 
-export const PRIVACY_UPDATED = '2026-08-30';
+export const PRIVACY_UPDATED = '2026-09-18';
 
 export const PRIVACY_HEADERS = {
   'content-type': 'text/html; charset=utf-8',
@@ -168,10 +168,42 @@ export const PRIVACY_HTML = `<!doctype html>
           identify you and are not shared with anyone.</li>
       </ul>
     </li>
+    <li><strong>To find a direct path</strong>, each device may ask a public
+      <strong>STUN</strong> server what its public IP address is. The Play
+      release uses Cloudflare's (<code>stun.cloudflare.com</code>) and
+      Google's (<code>stun.l.google.com</code>). A STUN server sees the
+      device's IP address and nothing else: no key, no room, no media.</li>
   </ul>
   <p>The rendezvous service for the Play release is operated by the developer of
-  this listing; contact details are below. This page is served by that same
-  service.</p>
+  this listing, on Cloudflare's infrastructure (Cloudflare Workers for the
+  rendezvous, Cloudflare Realtime for the TURN relay); contact details are
+  below. Cloudflare processes the connection data described above on the
+  developer's behalf. This page is served by that same service.</p>
+  <p>The app draws its screens in Android's own <strong>System
+  WebView</strong>. On most devices the WebView may contact Google for its own
+  services, such as Safe Browsing, under Google's privacy policy. The app
+  itself sends Google nothing.</p>
+
+  <h2>Using your own servers</h2>
+  <p>The diagnostics screen (long-press the version number) has a
+  <strong>Servers</strong> screen where you can point the app at a rendezvous,
+  STUN and TURN servers of your own. Those servers then receive what Tawny's
+  would (IP addresses, hashed room identifiers, encrypted media when relaying),
+  and they are operated by whoever runs them, not by us. Normally, Tawny's
+  servers stay behind yours as a fallback, used only if yours do not
+  answer.</p>
+  <p>The same screen has <strong>For tighter privacy [advanced]</strong>. With
+  it on, the app contacts only the servers you type there and nothing
+  else:</p>
+  <ul>
+    <li>no Tawny rendezvous or TURN relay, not even as a fallback;</li>
+    <li>no public STUN (a blank STUN field means none);</li>
+    <li>no relay picked up from a scanned pairing code;</li>
+    <li>no <strong>Send to Tawny</strong> button for diagnostics;</li>
+    <li>the WebView's Safe Browsing checks are turned off.</li>
+  </ul>
+  <p>If your servers are wrong or unreachable, the app does not connect over the
+  internet at all. It never falls back to ours.</p>
 
   <h2>Sending a diagnostics report</h2>
   <p>The diagnostics screen has a <strong>Send to Tawny</strong> button. It does
