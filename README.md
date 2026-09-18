@@ -43,6 +43,18 @@ a browser; the only thing that ever sees the stream is you.
   source, releases and the security model live there.</sub>
 </p>
 
+## Supporting it
+
+<a href="https://ko-fi.com/A6N425ZWFE"><img src="https://ko-fi.com/img/githubbutton_sm.svg" height="30" alt="Support me on Ko-fi"></a>
+<a href="https://strike.me/@loustrikes"><img src="docs/media/lightning-button.png" height="30" alt="Tip in Bitcoin"></a>
+
+Tawny is free: no ads, no account, no paywall, nothing locked. Chipping in
+unlocks nothing — every feature is there for everyone either way. These are the
+same two buttons the app shows; anything else asking for money in Tawny's name
+isn't us.
+
+---
+
 **What this is mainly for: a bridge.** The Monitor phone runs the [Tawny Android
 app](https://github.com/PressF4me/Tawny-Pet-Monitor-APK), pointed at your pet.
 Whoever's watching doesn't need the app at all — they open the
@@ -219,18 +231,6 @@ nftables symptom).
 
 Releases build from a `vX.Y.Z` tag via `.github/workflows/release.yml` —
 `linux/amd64` + `linux/arm64`, with provenance.
-
----
-
-## Supporting it
-
-<a href="https://ko-fi.com/A6N425ZWFE"><img src="https://ko-fi.com/img/githubbutton_sm.svg" height="30" alt="Support me on Ko-fi"></a>
-<a href="https://strike.me/@loustrikes"><img src="docs/media/lightning-button.png" height="30" alt="Tip in Bitcoin"></a>
-
-Tawny is free: no ads, no account, no paywall, nothing locked. Chipping in
-unlocks nothing — every feature is there for everyone either way. These are the
-same two buttons the app shows; anything else asking for money in Tawny's name
-isn't us.
 
 ---
 
