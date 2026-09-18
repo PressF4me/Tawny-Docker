@@ -3,7 +3,9 @@
 The single source of truth for what this deployment is and why. If a comment in
 the code disagrees with this file, the comment is right — fix this file.
 
-There is **one topology**. It runs over Tailscale. There is no self-signed
+There is **one topology** by default, and it runs over Tailscale. (The one
+exception is opt-in: "harder privacy" at `/setup`, which hands every networking
+choice to the operator, with no fallbacks. See the last section.) There is no self-signed
 certificate, no certificate authority, nothing for anyone to import, and no
 hosted service of any kind — no Cloudflare, no signup, no API token. You paste
 one Tailscale auth key into a compose file and approve one route.
@@ -254,3 +256,35 @@ and Tawny declined to advertise the single route the remote path depends on.
   pre-approved reusable key, not an ephemeral one (an ephemeral node drops its
   advertised route when it goes offline). Keep it in `.env`, not in the compose
   file.
+
+---
+
+## Harder privacy — the operator's own infrastructure
+
+Opt-in from `/setup`, off by default, and the only way anything in this file
+stops being true. It exists for somebody whose reason for self-hosting is that
+no third party appears anywhere in the path: not Tailscale's coordination
+server, not a `ts.net` certificate, not public STUN.
+
+* **One file.** `/data/privacy.json`, read and validated by
+  `docker/privacy.js`. The entrypoint evals `node privacy.js --env` before
+  anything networked starts, so tailscaled, coturn and `server.js` all run from
+  it. When enabled, it wins over the compose environment.
+* **No fallbacks.** Blank STUN is `STUN_URLS=off`. "Host Tailscale" never
+  switches to a node of its own. TLS "files" either serves the operator's
+  certificate or has no https listener at all. The page is sent `strict: true`
+  in `/config.json`, so it trusts no default either.
+* **Fail closed.** An enabled file that can't be parsed or validated starts
+  with Tailscale, STUN, TURN and the LAN bridge all off, and `/setup` says why.
+* **Restart in place.** `/setup/privacy/restart` drops `restart.req` in the run
+  dir. The supervisor loop stops its children and re-execs the entrypoint as the
+  same PID 1, from the environment the container *started* with (`env.orig`),
+  so settings that were just switched off don't linger.
+* **Per-control-server identity.** With a Headscale login server, the node's
+  state dir and saved auth key get a suffix for that server, so one server's
+  key is never presented to another.
+* **What it adds to `server.js`.** An https listener with the operator's
+  files (reloaded when they change, and a failure never takes the http
+  listener down), certificate checks for `/setup` (key match, names, expiry,
+  whether it chains to a public root, which the Android app requires), TURN
+  "never" and TURN over TLS, and a switch for the `/lan` bridge.

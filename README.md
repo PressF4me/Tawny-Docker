@@ -196,6 +196,32 @@ outside. Tailscale is how this is meant to run; LAN-only is a fallback.
 
 ---
 
+## For harder privacy [advanced]
+
+Everything above leans on Tailscale: its coordination server, its `ts.net`
+certificate, and public STUN from Google and Cloudflare, with fallbacks that keep
+a session alive when something is misconfigured. If you want none of that, open
+`/setup`, scroll to **For harder privacy [advanced]** and turn it on. It asks
+you to acknowledge the risks first, then lets you set every piece yourself:
+
+| | Choices |
+|---|---|
+| Network | Tawny's own Tailscale node · this machine's Tailscale · **no Tailscale** (bring your own VPN, WireGuard, port forward…) · a **Headscale** login server · Tailscale log upload on/off (off by default) |
+| HTTPS | `tailscale serve` · **your own certificate files** (Tawny serves HTTPS itself and reloads renewals) · your own reverse proxy · none |
+| Signalling | this server or an external `wss://` rendezvous · the LAN bridge on/off · allowed hostnames |
+| STUN | your servers, or **none** (blank means none, never the public list) |
+| TURN | when needed / always (nobody learns anybody's IP) / never · built-in coturn with its ports, public IP and optional TLS · or your own TURN servers |
+
+Settings live in `/data/privacy.json` and, while this mode is on, override the
+compose file's environment. **Restart and apply** restarts the container in
+place. **Nothing falls back**: a wrong setting fails instead of being covered
+by a default, and a settings file that can't be read starts with everything
+networked turned off. `http://<box>:8099/setup` on your LAN always stays
+reachable to undo it. The Android app's Servers screen has a matching switch for
+the phone side, and it only trusts certificates from public CAs.
+
+---
+
 ## Two ways to self-host
 
 This container is the bridge: the app as the Monitor, and a **browser Viewer**

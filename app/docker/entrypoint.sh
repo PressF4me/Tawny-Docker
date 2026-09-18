@@ -16,6 +16,17 @@ set -eu
 RUN_DIR=/tmp/tawny
 mkdir -p "$RUN_DIR"
 
+# The environment the container was started with, kept so a restart asked for
+# by /setup (the supervisor loop at the bottom) re-runs this script from exactly
+# it — not from this run's environment, which by then also holds everything
+# exported below, harder-privacy settings included. Without the reset, turning
+# harder privacy off would leave its values exported into the next run.
+ENV_SNAPSHOT="$RUN_DIR/env.orig"
+if [ "${TAWNY_REEXEC:-}" != 1 ]; then
+	export -p >"$ENV_SNAPSHOT"
+fi
+unset TAWNY_REEXEC
+
 PORT="${PORT:-8099}"
 export PORT
 
@@ -57,6 +68,45 @@ TLS_PORT=off
 export TLS_PORT
 
 log() { echo "tawny: $*"; }
+
+# --- harder privacy ---------------------------------------------------------
+#
+# /setup can switch this container to the operator's own networking, kept in
+# /data/privacy.json (see docker/privacy.js). When that file is enabled its
+# settings are exported here, before anything networked starts, and they win
+# over the compose environment: the operator chose them in /setup precisely so
+# that no default would be used behind their back. An enabled file that cannot
+# be read starts everything networked OFF rather than falling back.
+PRIVACY_FILE="${TAWNY_PRIVACY_FILE:-/data/privacy.json}"
+export TAWNY_PRIVACY_FILE="$PRIVACY_FILE"
+TAWNY_PRIVACY=off
+if [ -f "$PRIVACY_FILE" ]; then
+	if priv_env="$(node /app/docker/privacy.js --env 2>"$RUN_DIR/privacy.err")"; then
+		eval "$priv_env"
+	else
+		log "could not read $PRIVACY_FILE — starting with every network service off" >&2
+		export TAWNY_PRIVACY=on TAWNY_PRIVACY_BROKEN=on TS_DISABLE=on TS_SERVE=off \
+			STUN_URLS=off TURN_EMBEDDED=off TURN_MODE=never TAWNY_LAN_BRIDGE=off \
+			RENDEZVOUS_URL='' TAWNY_TURN_URLS='' TAWNY_TLS_CERT='' TAWNY_TLS_KEY=''
+	fi
+	if [ -s "$RUN_DIR/privacy.err" ]; then
+		sed 's/^/tawny: /' "$RUN_DIR/privacy.err" >&2 || true
+	fi
+fi
+export TAWNY_PRIVACY
+if [ "$TAWNY_PRIVACY" = on ]; then
+	if [ "${TAWNY_PRIVACY_BROKEN:-off}" = on ]; then
+		step privacy 0 "$(cat "$RUN_DIR/privacy.err" 2>/dev/null || echo "$PRIVACY_FILE could not be used") — everything networked is off until it is fixed at /setup"
+	else
+		log "harder privacy is on — using only the settings saved at /setup, no fallbacks"
+		step privacy 1 "harder privacy on: tailscale=${TS_MODE_WANTED:-off} tls=$([ -n "${TAWNY_TLS_CERT:-}" ] && echo files || echo "serve:${TS_SERVE:-off}") stun=${STUN_URLS:-off} turn=${TURN_MODE:-auto}"
+	fi
+fi
+TS_DISABLE="${TS_DISABLE:-off}"
+TS_MODE_WANTED="${TS_MODE_WANTED:-}"
+TS_LOGIN_SERVER="${TS_LOGIN_SERVER:-}"
+TS_NO_LOGS="${TS_NO_LOGS:-off}"
+export TS_LOGIN_SERVER TS_NO_LOGS
 
 # --- what LAN are we on? ----------------------------------------------------
 #
@@ -144,6 +194,15 @@ TS_HOST_SOCKET="${TS_HOST_SOCKET:-/var/run/tailscale/tailscaled.sock}"
 # with a fresh — or the same, retyped — key. TS_AUTHKEY from the environment
 # still wins when set; this is only the fallback for when it is not.
 TS_AUTHKEY_CACHE="${TAWNY_TS_AUTHKEY_CACHE:-/data/.tawny-authkey}"
+# A control server of the operator's own (harder privacy) gets its own node
+# state and its own saved key. Sharing them would hand a Headscale key to
+# Tailscale's servers the moment the mode is switched off again, and would
+# present a node registered on one server to the other.
+if [ -n "$TS_LOGIN_SERVER" ]; then
+	ts_ctl="$(printf '%s' "$TS_LOGIN_SERVER" | sed -e 's#^[a-z]*://##' -e 's#[^A-Za-z0-9.-]#_#g')"
+	TS_AUTHKEY_CACHE="$TS_AUTHKEY_CACHE.$ts_ctl"
+	TS_STATE_DIR="$TS_STATE_DIR-$ts_ctl"
+fi
 export TAWNY_TS_AUTHKEY_CACHE="$TS_AUTHKEY_CACHE"
 if [ -z "$TS_AUTHKEY" ] && [ -s "$TS_AUTHKEY_CACHE" ]; then
 	TS_AUTHKEY="$(cat "$TS_AUTHKEY_CACHE" 2>/dev/null || true)"
@@ -297,11 +356,14 @@ TS_RECOVER_REQ="$RUN_DIR/ts-recover.req"
 # Start (or restart) our own tailscaled and wait for its socket. Sets tsd_pid.
 ts_launch() {
 	mkdir -p "$TS_STATE_DIR"
+	# --no-logs-no-support stops tailscaled uploading its diagnostic logs to
+	# Tailscale; harder privacy sets it unless the operator opted in.
+	if [ "$TS_NO_LOGS" = on ]; then set -- --no-logs-no-support; else set --; fi
 	tailscaled \
 		--tun=userspace-networking \
 		--socket="$ts_sock" \
 		--statedir="$TS_STATE_DIR" \
-		--port=0 >"$RUN_DIR/tailscaled.log" 2>&1 &
+		--port=0 "$@" >"$RUN_DIR/tailscaled.log" 2>&1 &
 	tsd_pid=$!
 	# The daemon opens its socket a moment after the process exists; `tailscale
 	# up` against a socket that is not there yet fails with a connection error
@@ -397,11 +459,16 @@ ts_cache_key() { # authkey
 # classifiable error instead of blocking; on a stale identity, archive it and
 # retry once — the "replace an old session on the spot" the operator should
 # never have to do by hand. Records tailscale_up with a kind for /setup.
+# A self-hosted control server (Headscale), from harder privacy. Unquoted on
+# use: empty expands to nothing, and privacy.js has already held the URL to a
+# character set with no spaces or shell metacharacters.
+ts_login_flag=''
+[ -n "$TS_LOGIN_SERVER" ] && ts_login_flag="--login-server=$TS_LOGIN_SERVER"
 ts_join() { # authkey
 	# `if cmd; then` (not `cmd; [ $? ]`) so `set -e` does not abort on the
 	# expected failure path.
 	if tailscale --socket="$ts_sock" up \
-		--authkey="$1" --hostname="$TS_HOSTNAME" \
+		--authkey="$1" --hostname="$TS_HOSTNAME" $ts_login_flag \
 		--accept-dns=false --accept-routes=false --timeout=60s \
 		>"$RUN_DIR/ts-up.log" 2>&1; then
 		rm -f "$TS_RESET_MARK"
@@ -418,7 +485,7 @@ ts_join() { # authkey
 		ts_reset_state
 		: >"$TS_RESET_MARK"
 		if tailscale --socket="$ts_sock" up \
-			--authkey="$1" --hostname="$TS_HOSTNAME" \
+			--authkey="$1" --hostname="$TS_HOSTNAME" $ts_login_flag \
 			--accept-dns=false --accept-routes=false --timeout=60s \
 			>"$RUN_DIR/ts-up.log" 2>&1; then
 			# Clearing the state dir is what fixed it, so the marker has done
@@ -447,8 +514,17 @@ ts_join() { # authkey
 # not got one yet can paste it into /setup and be joined without ever editing a
 # file or restarting anything. A logged-out tailscaled is idle and harmless;
 # `up` is what joins, and that can happen now or in five minutes from a browser.
-if command -v tailscaled >/dev/null 2>&1 &&
-	{ [ -n "$TS_AUTHKEY" ] || [ ! -S "$TS_HOST_SOCKET" ]; }; then
+if [ "$TS_DISABLE" = on ]; then
+	# Harder privacy, "no Tailscale": not started, not probed, not mentioned to
+	# the host's daemon. Reaching this network from outside is the operator's.
+	log "Tailscale is off (harder privacy) — bring your own way into this network"
+	step tailscale_off 1 "Tailscale is off by choice; remote access is your own network's job"
+elif [ "$TS_MODE_WANTED" = host ] && [ ! -S "$TS_HOST_SOCKET" ]; then
+	# Chosen explicitly, so no quiet switch to a node of our own.
+	log "harder privacy asks for the host's tailscaled, but $TS_HOST_SOCKET is not mounted" >&2
+	step tailscale_up 0 "harder privacy is set to use this machine's Tailscale, but its socket ($TS_HOST_SOCKET) is not mounted into the container" host_missing
+elif command -v tailscaled >/dev/null 2>&1 && [ "$TS_MODE_WANTED" != host ] &&
+	{ [ -n "$TS_AUTHKEY" ] || [ ! -S "$TS_HOST_SOCKET" ] || [ "$TS_MODE_WANTED" = own ]; }; then
 	ts_sock="$RUN_DIR/tailscaled.sock"
 	ts_mode=own
 	log "starting our own tailscaled (userspace networking), state in $TS_STATE_DIR"
@@ -678,6 +754,23 @@ if [ "$TURN_EMBEDDED" = on ] && command -v turnserver >/dev/null 2>&1; then
 	if [ -n "${TAWNY_PUBLIC_IP:-}" ]; then
 		set -- "$@" --external-ip="$TAWNY_PUBLIC_IP"
 	fi
+	# TURN over TLS with the operator's own certificate (harder privacy). The
+	# plain listener stays for UDP; `turns:` is added to what /turn hands out.
+	if [ -n "${TAWNY_TURN_TLS_PORT:-}" ] && [ -r "${TAWNY_TLS_CERT:-}" ] && [ -r "${TAWNY_TLS_KEY:-}" ]; then
+		for a in "$@"; do
+			shift
+			[ "$a" = --no-tls ] && continue
+			set -- "$@" "$a"
+		done
+		set -- "$@" --tls-listening-port="$TAWNY_TURN_TLS_PORT" \
+			--cert="$TAWNY_TLS_CERT" --pkey="$TAWNY_TLS_KEY"
+		log "coturn also on TLS :$TAWNY_TURN_TLS_PORT with $TAWNY_TLS_CERT"
+	elif [ -n "${TAWNY_TURN_TLS_PORT:-}" ]; then
+		log "TURN over TLS asked for, but the certificate files are not readable — TLS relay off" >&2
+		step coturn_tls 0 "TURN over TLS needs $TAWNY_TLS_CERT and $TAWNY_TLS_KEY readable inside the container"
+		TAWNY_TURN_TLS_PORT=''
+	fi
+	export TAWNY_TURN_TLS_PORT
 	turnserver "$@" &
 	turn_pid=$!
 	log "coturn started on :$TURN_PORT (relay $TURN_MIN_PORT-$TURN_MAX_PORT), all interfaces"
@@ -711,7 +804,23 @@ trap term TERM INT
 
 # busybox ash has no reliable `wait -n`, so poll. One second of latency on a
 # crash is irrelevant next to portability across the shells this image may use.
+RESTART_REQ="$RUN_DIR/restart.req"
+rm -f "$RESTART_REQ"
 while :; do
+	# /setup saved new harder-privacy settings and asked for them to apply.
+	# Everything this script started is stopped and the script runs again from
+	# the top as the same PID 1, so no restart policy or `docker` access is
+	# needed and the container never actually exits.
+	if [ -f "$RESTART_REQ" ]; then
+		rm -f "$RESTART_REQ"
+		log "/setup asked for a restart to apply new settings"
+		term
+		for p in $node_pid $turn_pid $tsd_pid; do
+			i=0; while kill -0 "$p" 2>/dev/null && [ "$i" -lt 10 ]; do i=$((i + 1)); sleep 1; done
+			kill -9 "$p" 2>/dev/null || true
+		done
+		exec env -i TAWNY_REEXEC=1 /bin/sh -c '. "$1" && exec "$2"' sh "$ENV_SNAPSHOT" "$0"
+	fi
 	# /setup cannot restart tailscaled itself (server.js does not own the
 	# process), so it leaves the pasted key here to ask for the same
 	# archive-and-rejoin ts_join() does at boot. Handled before the

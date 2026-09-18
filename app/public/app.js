@@ -1765,6 +1765,18 @@ function fallBackToDefault(entry, why) {
   return true;
 }
 
+/**
+ * Harder privacy, and the user's relay is not answering. There is no fallback
+ * by design — the user turned every one of them off — so the only honest thing
+ * left is to say it, once per socket, and keep redialling the relay they chose.
+ */
+function strictRelayDown(entry, why) {
+  if (entry.strictNoted) return;
+  entry.strictNoted = true;
+  diag(`own relay unusable (${why}) — harder privacy is on, NOT falling back`);
+  toast(TawnyT.t('w_toast_strict_no_answer'));
+}
+
 async function sha256hex(s) {
   const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -2081,6 +2093,10 @@ function openSignal(base, tag) {
       clearTimeout(entry.helloTimer);
       if (canFallBack()) {
         entry.helloTimer = setTimeout(() => fallBackToDefault(entry, 'no welcome'), RELAY_HELLO_MS);
+      } else if (tag === 'cloud' && S.cfg.strict) {
+        // Harder privacy: the same check, and nothing to swap to. Say so once
+        // instead of hanging on a socket that will never admit anyone.
+        entry.helloTimer = setTimeout(() => strictRelayDown(entry, 'no welcome'), RELAY_HELLO_MS);
       }
 
       // The LAN leg is plain ws:// on a shared Wi-Fi, so the raw ticket must
@@ -2215,6 +2231,7 @@ function openSignal(base, tag) {
       // answering at all — a wrong address, a host that is down, a TLS
       // failure. Two of those in a row is enough to tell it from a blip.
       if (canFallBack() && entry.retry >= 1 && fallBackToDefault(entry, `close ${ev.code}`)) return;
+      if (tag === 'cloud' && S.cfg.strict && entry.retry >= 1) strictRelayDown(entry, `close ${ev.code}`);
 
       const wait = Math.min(1000 * 2 ** entry.retry++, 15000);
 
@@ -2337,6 +2354,9 @@ async function fetchIce() {
   // needs a relay (both peers behind carrier NAT) with nowhere to go.
   const rv = rendezvousBase() || S.cfg.rendezvous;
   if (!rv) { S.ice = []; return; }
+  // Harder privacy can forbid asking the rendezvous for TURN at all; the STUN
+  // and TURN the user typed are then the whole list (see iceServers()).
+  if (S.cfg.turnFetch === false) { S.ice = []; return; }
   const httpBase = rv.replace(/^ws/i, 'http').replace(/\/+$/, '');
   try {
     const q = new URLSearchParams({ room: S.roomId });
@@ -2821,8 +2841,17 @@ function iceServers() {
   // stays underneath it, so a custom entry that turns out to be wrong costs
   // nothing — the built-in relay is still in the list.
   const mine = Array.isArray(S.cfg.turn) ? S.cfg.turn : [];
-  if (S.ice && S.ice.length) return [...mine, ...S.ice];
-  return [...mine, ...(S.cfg.stun || []).map((urls) => ({ urls }))];
+  const all = (S.ice && S.ice.length) ? [...mine, ...S.ice]
+    : [...mine, ...(S.cfg.stun || []).map((urls) => ({ urls }))];
+  // "Never" under harder privacy: whatever a server hands out, no relay.
+  if (S.cfg.turnMode === 'never') return all.filter((e) => !isTurnEntry(e));
+  return all;
+}
+
+/** An RTCIceServer that names any turn:/turns: URL. */
+function isTurnEntry(e) {
+  const u = Array.isArray(e?.urls) ? e.urls : [e?.urls];
+  return u.some((x) => /^turns?:/i.test(String(x || '')));
 }
 
 /** Push a newly-fetched ICE server list into connections that already exist. */
@@ -4757,7 +4786,19 @@ window.tawnyStart = function (role, key, name, signalUrl, rendezvousUrl, token, 
   const srv = opts && opts.servers;
   if (srv && typeof srv === 'object') {
     if (typeof srv.fallback === 'string' && srv.fallback) S.cfg.rendezvousFallback = srv.fallback;
-    if (Array.isArray(srv.stun) && srv.stun.length) {
+    // Harder privacy: no fallback is sent at all, STUN may be an empty list
+    // that means "none" (not "the build's"), and the TURN policy is the
+    // user's. Kept under `shell*` names for the same reason as stunCustom:
+    // init() rebuilds S.cfg from config.json after this runs.
+    if (srv.strict === true) {
+      S.cfg.strict = true;
+      S.cfg.rendezvousFallback = '';
+      S.cfg.stunCustom = Array.isArray(srv.stun) ? srv.stun.filter((u) => typeof u === 'string') : [];
+      S.cfg.stun = S.cfg.stunCustom;
+      if (['auto', 'always', 'never'].includes(srv.turnMode)) S.cfg.shellTurnMode = srv.turnMode;
+      if (srv.turnFetch === false) S.cfg.turnFetch = false;
+    }
+    if (!S.cfg.strict && Array.isArray(srv.stun) && srv.stun.length) {
       // Kept under its own name as well: init()'s config.json read runs *after*
       // this (it is behind an await) and rebuilds S.cfg, so a plain `stun`
       // would be quietly replaced by the build's list a moment later.
@@ -4828,18 +4869,25 @@ window.tawnyPairCode = function (code, expMs) {
     const r = await fetch('config.json');
     if (r.ok) {
       const j = await r.json();
+      // Harder privacy comes from either end: the native shell's Servers
+      // screen (already on S.cfg), or a server that says so in config.json
+      // (the container's /setup). Either way the page trusts no default.
+      const strict = !!S.cfg.strict || j.strict === true;
       S.cfg = {
         // A shell value wins over the build's, here as for the rendezvous:
         // this rebuild runs *after* tawnyStart() and would otherwise put the
         // build's STUN list back over the user's.
         stunCustom: S.cfg.stunCustom,
-        stun: S.cfg.stunCustom?.length ? S.cfg.stunCustom
+        stun: (S.cfg.strict || S.cfg.stunCustom?.length) ? (S.cfg.stunCustom || [])
           : (Array.isArray(j.stun) ? j.stun : []),
-        turnMode: j.turnMode || S.cfg.turnMode || 'auto',
+        turnMode: S.cfg.shellTurnMode || j.turnMode || S.cfg.turnMode || 'auto',
+        shellTurnMode: S.cfg.shellTurnMode,
         rendezvous: S.cfg.rendezvous || j.rendezvous || '',   // shell value wins
         authRequired: !!j.authRequired,
-        rendezvousFallback: S.cfg.rendezvousFallback,
-        turn: S.cfg.turn
+        rendezvousFallback: strict ? '' : S.cfg.rendezvousFallback,
+        turn: S.cfg.turn,
+        strict,
+        turnFetch: S.cfg.turnFetch === false || j.turnFetch === false ? false : undefined
       };
     }
   } catch {}

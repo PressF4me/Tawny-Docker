@@ -1055,6 +1055,525 @@ function stepWatch(data) {
   };
 }
 
+/* --------------------------------------------------------- harder privacy */
+//
+// The panel under the steps, and — once it is running — the steps themselves.
+//
+// Everything above this assumes one topology: Tailscale, `tailscale serve`,
+// public STUN. This is the way out of every one of those for somebody who wants
+// their own infrastructure end to end. The server keeps the settings in the data
+// volume (docker/privacy.js); this panel edits them. The first time the mode is
+// switched on it asks for an explicit acknowledgement, and the server refuses
+// to save without one.
+
+const priv = {
+  form: null,         // working copy of the settings, edited in place
+  dirty: false,       // unsaved edits — the poll must not rebuild over them
+  ack: false,         // the risk acknowledgement, first enable only
+  errors: {},         // field -> message, from the last save attempt
+  warnings: null,     // from the last save, else the server's for what is saved
+  busy: false,
+  msg: '', msgKind: '',
+  restarting: false
+};
+
+function privFormFrom(p) {
+  const base = p.saved || p.startingPoint || {};
+  return JSON.parse(JSON.stringify({ ...base, turnSecret: '' }));
+}
+
+/** A labelled text input bound to priv.form[key]. List fields are one per line. */
+function privText(key, label, { placeholder = '', help = '', list = false, type = 'text' } = {}) {
+  const id = `priv-${key}`;
+  const val = priv.form[key];
+  const input = list
+    ? el('textarea', { id, class: 'join-input priv-input', rows: '3', placeholder, spellcheck: 'false' })
+    : el('input', { id, class: 'join-input priv-input', type, placeholder,
+      autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
+  input.value = list ? (val || []).join('\n') : (val == null ? '' : String(val));
+  input.addEventListener('input', () => {
+    priv.form[key] = list ? input.value.split(/[\s,]+/).filter(Boolean) : input.value;
+    priv.dirty = true;
+    delete priv.errors[key];
+    input.classList.remove('is-bad');
+    const e = document.getElementById(`${id}-err`);
+    if (e) e.hidden = true;
+  });
+  if (priv.errors[key]) input.classList.add('is-bad');
+  return el('div', { class: 'priv-field' },
+    el('label', { class: 'join-label', for: id }, label),
+    input,
+    help ? el('p', { class: 'priv-help' }, help) : null,
+    el('p', Object.assign({ id: `${id}-err`, class: 'join-msg is-bad' }, priv.errors[key] ? {} : { hidden: 'hidden' }),
+      priv.errors[key] || ''));
+}
+
+/** A checkbox bound to priv.form[key]. */
+function privCheck(key, label, help) {
+  const id = `priv-${key}`;
+  const box = el('input', { id, type: 'checkbox' });
+  box.checked = !!priv.form[key];
+  box.addEventListener('change', () => { priv.form[key] = box.checked; priv.dirty = true; renderPrivacy(lastData, true); });
+  return el('div', { class: 'priv-field' },
+    el('label', { class: 'priv-check', for: id }, box, el('span', {}, label)),
+    help ? el('p', { class: 'priv-help' }, help) : null,
+    priv.errors[key] ? el('p', { class: 'join-msg is-bad' }, priv.errors[key]) : null);
+}
+
+/** Radio choices bound to priv.form[key]. */
+function privChoice(key, label, options) {
+  const wrap = el('fieldset', { class: 'priv-choice' }, el('legend', { class: 'join-label' }, label));
+  for (const o of options) {
+    const id = `priv-${key}-${o.v}`;
+    const r = el('input', { id, type: 'radio', name: `priv-${key}`, value: o.v });
+    r.checked = priv.form[key] === o.v;
+    r.addEventListener('change', () => { priv.form[key] = o.v; priv.dirty = true; delete priv.errors[key]; renderPrivacy(lastData, true); });
+    wrap.append(el('label', { class: 'priv-radio', for: id }, r,
+      el('span', {}, el('b', {}, o.label), o.desc ? el('small', {}, o.desc) : null)));
+  }
+  if (priv.errors[key]) wrap.append(el('p', { class: 'join-msg is-bad' }, priv.errors[key]));
+  return wrap;
+}
+
+function privSection(title, ...kids) {
+  return el('div', { class: 'priv-section' }, el('h3', {}, title), ...kids.filter(Boolean));
+}
+
+async function privSave(andRestart) {
+  if (priv.busy) return;
+  priv.busy = true;
+  priv.msg = 'Saving…'; priv.msgKind = '';
+  renderPrivacy(lastData, true);
+  try {
+    const res = await fetch('/setup/privacy', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ config: priv.form, acknowledge: priv.ack })
+    });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok || !out.ok) {
+      priv.errors = out.errors || {};
+      priv.warnings = out.warnings || priv.warnings;
+      priv.msg = out.error || `Could not save (${res.status}).`;
+      priv.msgKind = 'is-bad';
+      priv.busy = false;
+      renderPrivacy(lastData, true);
+      return;
+    }
+    priv.errors = {};
+    priv.warnings = out.warnings || [];
+    priv.dirty = false;
+    priv.form.turnSecret = '';
+    if (andRestart) {
+      priv.busy = false;
+      return privRestart();
+    }
+    priv.msg = 'Saved. Nothing changes until the container restarts — press “Restart and apply” when you are ready.';
+    priv.msgKind = 'is-ok';
+  } catch {
+    priv.msg = 'Could not reach the container.';
+    priv.msgKind = 'is-bad';
+  }
+  priv.busy = false;
+  await tick();
+}
+
+async function privRestart() {
+  priv.busy = true;
+  priv.msg = 'Restarting with your settings…'; priv.msgKind = '';
+  renderPrivacy(lastData, true);
+  try {
+    const res = await fetch('/setup/privacy/restart', { method: 'POST' });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(out.error || String(res.status));
+    priv.restarting = true;
+    const lan = lastData && lastData.lan && lastData.lan.ip;
+    priv.msg = 'Restarting. This page reconnects on its own in a few seconds.' +
+      (lan ? ` If this address stops answering (for example you turned off Tailscale or its HTTPS), open http://${lan}:${location.port || 8099}/setup on your home network.` : '');
+    priv.msgKind = 'is-ok';
+  } catch (e) {
+    priv.msg = `Could not restart: ${e.message}. Restart the container yourself (docker compose restart) to apply.`;
+    priv.msgKind = 'is-bad';
+  }
+  priv.busy = false;
+  priv.form = null;           // re-read from the server once it is back
+  renderPrivacy(lastData, true);
+}
+
+/**
+ * Build (or rebuild) the panel. `force` rebuilds even with unsaved edits —
+ * used by the panel's own controls, which keep priv.form as the truth. The
+ * poll passes false, so it never wipes what someone is typing.
+ */
+function renderPrivacy(data, force) {
+  const host = document.getElementById('privacy');
+  if (!host || !data || !data.privacy) return;
+  const p = data.privacy;
+  if (!force && (priv.dirty || priv.busy || host.contains(document.activeElement))) return;
+  if (!priv.form || (!priv.dirty && !force)) priv.form = privFormFrom(p);
+  // Back from a restart: the running settings are the saved ones again.
+  if (priv.restarting && !p.pendingRestart) { priv.restarting = false; priv.msg = ''; }
+
+  const f = priv.form;
+  const firstEnable = f.enabled && !p.savedEnabled;
+  host.className = `privacy${f.enabled ? ' is-on' : ''}`;
+  host.textContent = '';
+
+  const sw = el('button', {
+    class: 'priv-switch', type: 'button', role: 'switch',
+    'aria-checked': f.enabled ? 'true' : 'false', 'aria-labelledby': 'priv-title'
+  }, el('i', {}));
+  sw.addEventListener('click', () => {
+    f.enabled = !f.enabled;
+    priv.dirty = true;
+    if (!f.enabled) priv.ack = false;
+    priv.msg = '';
+    renderPrivacy(lastData, true);
+  });
+
+  host.append(el('div', { class: 'priv-head' },
+    el('div', {},
+      el('h2', { id: 'priv-title' }, 'For harder privacy ', el('span', { class: 'priv-tag' }, '[advanced]')),
+      el('p', { class: 'priv-sub' }, 'Your own infrastructure, every connection chosen by you, and no fallbacks.')),
+    sw));
+
+  // What is running, as opposed to what the switch is showing.
+  const running = p.active
+    ? (p.broken ? 'Running now: harder privacy, but the saved settings could not be used — everything networked is OFF until you fix and save them.'
+      : 'Running now: harder privacy. Only the settings below are in use.')
+    : 'Running now: the normal setup (Tailscale, with safety nets).';
+  host.append(el('p', { class: `priv-running${p.active ? ' is-on' : ''}${p.broken ? ' is-bad' : ''}` }, running));
+
+  if (p.pendingRestart && !priv.dirty) {
+    const btn = el('button', { class: 'wide primary', type: 'button' }, 'Restart and apply');
+    btn.disabled = priv.busy || priv.restarting || !p.canRestart;
+    btn.addEventListener('click', () => privRestart());
+    host.append(el('div', { class: 'priv-pending' },
+      el('p', {}, el('b', {}, 'Saved, not applied yet. '),
+        p.canRestart ? 'The container restarts in place, which takes a few seconds, and live calls drop.'
+          : 'Restart the container to apply (docker compose restart).'),
+      p.canRestart ? btn : null));
+  }
+
+  if (!f.enabled) {
+    host.append(el('p', { class: 'step-say' },
+      'Off: Tawny works the normal way. It uses Tailscale for the address and remote access, public STUN from Google and Cloudflare, and the fallbacks that keep a session alive when something is misconfigured. Turn this on to replace all of it with your own infrastructure: your own certificate, a Headscale server or no Tailscale at all, your own STUN and TURN, or none.'));
+    if (p.savedEnabled || p.active) {
+      host.append(el('p', { class: 'step-say' },
+        el('b', {}, 'Turning it off '), 'goes back to the normal setup after a restart. Your settings are kept, so turning it on again starts where you left off.'));
+    }
+  }
+
+  if (f.enabled && firstEnable) {
+    const ack = el('input', { id: 'priv-ack', type: 'checkbox' });
+    ack.checked = priv.ack;
+    ack.addEventListener('change', () => { priv.ack = ack.checked; renderPrivacy(lastData, true); });
+    host.append(el('div', { class: 'priv-risk' },
+      el('h3', {}, 'Read this first'),
+      el('ul', {},
+        el('li', {}, el('b', {}, 'No fallbacks. '), 'If a setting here is wrong, or a server of yours is down, the part it covers does not work. Tawny will not switch to Tailscale, public STUN or its own relay to rescue it.'),
+        el('li', {}, el('b', {}, 'Blank means none. '), 'Blank STUN is no STUN. No TURN means no relay. No Tailscale means nothing here gets a viewer outside your house into this network. That becomes your VPN, WireGuard, port forward or other tool, and Tawny cannot check it.'),
+        el('li', {}, el('b', {}, 'Browsers need HTTPS. '), 'Camera and microphone only work on a secure page. With no certificate, or one a device does not trust, browsers will not start a session on it.'),
+        el('li', {}, el('b', {}, 'The Android app trusts public CAs only. '), 'A certificate from your own CA works in browsers once you install that CA, but the app will refuse it. Its own Servers screen has the same harder-privacy switch for the phone side.'),
+        el('li', {}, el('b', {}, 'You can lock yourself out of this page’s https address. '), `http://${data.lan.ip || '<this machine>'}:${location.port || 8099}/setup on your home network always stays open to undo it.`),
+        el('li', {}, el('b', {}, 'Your video stays end-to-end encrypted either way. '), 'This changes who you depend on to connect, not whether anyone can watch.')),
+      el('label', { class: 'priv-check priv-ack', for: 'priv-ack' }, ack,
+        el('span', {}, 'I understand there are no fallbacks, and that a setup that is wrong will not work at all.'))));
+  }
+
+  if (f.enabled) {
+    host.append(
+      privSection('Network — how viewers reach this house',
+        privChoice('tailscale', 'Tailscale', [
+          { v: 'own', label: 'Tawny’s own node', desc: 'This container joins a tailnet by itself (auth key in /setup or TS_AUTHKEY).' },
+          { v: 'host', label: 'This machine’s Tailscale', desc: 'Use the tailscaled already on the host (its socket must be mounted). Never swaps to a node of its own.' },
+          { v: 'off', label: 'No Tailscale', desc: 'Not started at all. Remote access is your VPN, WireGuard, port forward or other tool.' }
+        ]),
+        f.tailscale !== 'off' ? privText('loginServer', 'Control server (Headscale)', {
+          placeholder: 'https://headscale.example.net — blank = Tailscale’s',
+          help: 'Your own coordination server instead of Tailscale’s. Tawny keeps a separate identity and saved key for each control server, so switching never mixes them or sends one server’s key to another. Join with a pre-auth key from your server.'
+        }) : null,
+        f.tailscale !== 'off' ? privCheck('tsLogs', 'Send tailscaled’s diagnostic logs to Tailscale',
+          'Off (recommended here) runs tailscaled with --no-logs-no-support.') : null),
+
+      privSection('HTTPS — the address browsers open',
+        privChoice('tls', 'Who provides the certificate', [
+          { v: 'tailscale', label: 'Tailscale (tailscale serve)', desc: 'A ts.net Let’s Encrypt certificate. Needs Tailscale on, with MagicDNS and HTTPS certificates.' },
+          { v: 'files', label: 'My own certificate', desc: 'Tawny serves HTTPS itself with your certificate and key files. It reloads them when they change.' },
+          { v: 'proxy', label: 'My own reverse proxy', desc: 'Caddy, nginx, Traefik and so on terminate TLS in front of port ' + (location.port || 8099) + '.' },
+          { v: 'none', label: 'None', desc: 'Plain http only. Browsers will not start a session. Only the Android app on this Wi-Fi works.' }
+        ]),
+        f.tls === 'files' ? privText('tlsCert', 'Certificate (full chain, PEM)', { placeholder: '/data/tls/fullchain.pem',
+          help: 'A path inside the container. The data volume is mounted at /data, or mount your own directory read-only.' }) : null,
+        f.tls === 'files' ? privText('tlsKey', 'Private key (PEM)', { placeholder: '/data/tls/privkey.pem' }) : null,
+        f.tls === 'files' ? privText('httpsPort', 'HTTPS port', { placeholder: '8443', type: 'number' }) : null,
+        f.tls === 'files' && p.tls ? privTlsSummary(p.tls) : null,
+        f.tls === 'proxy' ? privCheck('trustProxy', 'Trust X-Forwarded-* from private addresses',
+          'Needed so the page learns its real https:// address from your proxy. Turn off if untrusted hosts can reach port ' + (location.port || 8099) + ' directly.') : null),
+
+      privSection('Signalling — how the two ends find each other',
+        privText('rendezvous', 'Rendezvous for browsers', { placeholder: 'wss://relay.example.net — blank = this server',
+          help: 'Blank: browsers signal through this container, which already is a relay. Set it only if you run the relay somewhere else.' }),
+        privCheck('lanBridge', 'LAN bridge to an Android Monitor',
+          'Lets a browser Viewer reach the app’s own Wi-Fi relay through this server. Off: this server never opens a connection to anything on your network.'),
+        privText('allowedHosts', 'Hostnames this server answers to', { list: true, placeholder: 'tawny.example.net\n192.168.1.10',
+          help: 'One per line. Blank keeps what the container was started with (ALLOWED_HOSTS).' })),
+
+      privSection('STUN — finding a public address',
+        privText('stun', 'STUN servers', { list: true, placeholder: 'stun:stun.example.net:3478',
+          help: 'One per line. Blank = none at all, not Google’s or Cloudflare’s. The built-in coturn answers STUN too: stun:<your public host>:3478.' })),
+
+      privSection('TURN — relaying when nothing direct works',
+        privChoice('turnMode', 'Use a relay', [
+          { v: 'auto', label: 'When needed', desc: 'Direct first. The relay only carries a call that cannot connect otherwise.' },
+          { v: 'always', label: 'Always', desc: 'Every call goes through the relay, so the two ends never learn each other’s IP address.' },
+          { v: 'never', label: 'Never', desc: 'No relay handed out at all. Strict networks will not connect.' }
+        ]),
+        f.turnMode !== 'never' ? privCheck('turnEmbedded', 'Built-in relay (coturn in this container)') : null,
+        f.turnMode !== 'never' && f.turnEmbedded ? el('div', { class: 'priv-row' },
+          privText('turnPort', 'Port', { type: 'number', placeholder: '3478' }),
+          privText('turnMinPort', 'Relay ports from', { type: 'number', placeholder: '49160' }),
+          privText('turnMaxPort', 'to', { type: 'number', placeholder: '49200' })) : null,
+        f.turnMode !== 'never' && f.turnEmbedded ? privText('publicIp', 'Public IP (behind a port forward)', { placeholder: 'blank = this network’s address' }) : null,
+        f.turnMode !== 'never' && f.turnEmbedded && f.tls === 'files' ? privCheck('turnTls', 'Also relay over TLS (turns:) with my certificate') : null,
+        f.turnMode !== 'never' && f.turnEmbedded && f.turnTls ? privText('turnTlsPort', 'TURN TLS port', { type: 'number', placeholder: '5349' }) : null,
+        f.turnMode !== 'never' ? privText('turnUrls', 'Or your own TURN servers', { list: true, placeholder: 'turns:turn.example.net:5349',
+          help: 'One per line. When set, these replace the built-in relay.' }) : null,
+        f.turnMode !== 'never' && (f.turnUrls || []).length ? privText('turnSecret', 'Their static-auth-secret', {
+          type: 'password',
+          placeholder: (p.saved && p.saved.turnSecretSet) ? 'saved — leave blank to keep it' : 'coturn use-auth-secret secret' }) : null)
+    );
+  }
+
+  // Consequences of what is saved, or of the last attempt to save.
+  const warns = priv.warnings || (f.enabled ? p.warnings : []) || [];
+  if (f.enabled && warns.length) {
+    host.append(el('div', { class: 'priv-warn' },
+      el('h3', {}, 'What these choices give up'),
+      el('ul', {}, ...warns.map((w) => el('li', {}, w)))));
+  }
+
+  const changed = priv.dirty || (f.enabled !== !!p.savedEnabled);
+  if (f.enabled || p.savedEnabled || p.active) {
+    const save = el('button', { class: 'wide primary', type: 'button' },
+      f.enabled ? 'Save and restart' : 'Turn off and restart');
+    save.disabled = priv.busy || (firstEnable && !priv.ack) || (!changed && !p.pendingRestart && !priv.dirty);
+    save.addEventListener('click', () => privSave(true));
+    const saveOnly = el('button', { class: 'wide', type: 'button' }, 'Save only');
+    saveOnly.disabled = priv.busy || (firstEnable && !priv.ack) || !changed;
+    saveOnly.addEventListener('click', () => privSave(false));
+    host.append(el('div', { class: 'priv-actions' }, save, saveOnly));
+  }
+  if (priv.msg) host.append(el('p', { class: `join-msg ${priv.msgKind}` }, priv.msg));
+  host.append(el('p', { class: 'priv-help' }, `Stored in ${p.file} in the data volume. When it is on, these settings override the compose file’s environment.`));
+}
+
+function privTlsSummary(t) {
+  if (t.error && !t.names) return el('p', { class: 'join-msg is-bad' }, t.error);
+  const rows = [
+    ['Covers', (t.names || []).join(', ') || t.subject],
+    ['Expires', `${(t.notAfter || '').slice(0, 10)} (${t.daysLeft} days)`],
+    ['Key', t.keyMatches ? 'matches' : 'does NOT match'],
+    ['Trusted by', t.publicTrust ? 'every browser and the Android app (public CA)'
+      : t.selfSigned ? 'nothing until you install it on each device (self-signed). The Android app will refuse it.'
+      : 'only devices that have your CA installed. The Android app will refuse it.']
+  ];
+  return el('div', { class: `priv-cert${t.ok ? '' : ' is-bad'}` },
+    ...rows.map(([k, v]) => el('p', {}, el('b', {}, k + ': '), v)),
+    t.error ? el('p', { class: 'join-msg is-bad' }, t.error) : null);
+}
+
+/* The steps, when harder privacy is what is running. */
+
+function privAddress(data) {
+  const p = data.privacy || {};
+  const a = p.applied || {};
+  if (a.tls === 'files') {
+    const name = ((p.tls && p.tls.names) || []).find((n) => !n.startsWith('*')) || data.lan.ip;
+    return name ? `https://${name}${a.httpsPort === 443 ? '' : ':' + a.httpsPort}/` : '';
+  }
+  if (a.tls === 'tailscale' && data.tailscale.dnsName && serveState(data.tailscale) !== false) {
+    return `https://${data.tailscale.dnsName}/`;
+  }
+  return '';
+}
+
+function privStepNetwork(data) {
+  const a = data.privacy.applied || {};
+  const ts = data.tailscale;
+  if (a.tailscale === 'off') {
+    return {
+      state: 'done', title: 'Your network', tag: 'no Tailscale — your choice',
+      body: [
+        el('p', { class: 'step-say' }, 'Tailscale is not running. On this Wi-Fi, devices reach each other directly. For watching from outside the house, a viewer needs a way into this network that you provide: a VPN such as WireGuard or OpenVPN, a port forward to this machine, or any other tool.'),
+        why('What has to be reachable?',
+          `The page: the HTTPS address in the next step. The camera phone: for video to flow, the viewer has to reach the Monitor phone’s address (for example ${data.lan.ip || '192.168.1.x'}) directly, which a VPN into this network gives you, or reach a TURN relay both ends can use. Tawny cannot see or check your network from here.`)
+      ]
+    };
+  }
+  if (!a.loginServer) return ts.loggedIn ? stepRoute(data) : stepConnect(data);
+  // Headscale: the same mechanism, none of Tailscale's admin-console wording.
+  if (!ts.loggedIn) {
+    return {
+      state: 'now', title: 'Join your control server', tag: a.loginServer,
+      body: [
+        el('p', { class: 'step-say' }, `Tawny’s node signs in to ${a.loginServer} rather than Tailscale’s. Create a reusable pre-auth key on your server and paste it here.`),
+        el('div', { class: 'step-do' }, el('code', {}, 'headscale preauthkeys create --user <you> --reusable')),
+        joinForm()
+      ]
+    };
+  }
+  const pending = ts.pendingRoutes || [];
+  if (pending.length) {
+    return {
+      state: 'now', title: 'Approve the route', tag: pending.join(', '),
+      body: [
+        el('p', { class: 'step-say' }, `Signed in to ${a.loginServer}. The route to your home network is waiting for approval on your control server.`),
+        el('div', { class: 'step-do' }, el('code', {}, `headscale nodes approve-routes --identifier <tawny's id> --routes ${pending.join(',')}`))
+      ]
+    };
+  }
+  return {
+    state: 'done', title: 'Your control server', tag: `signed in to ${a.loginServer}`,
+    body: [el('p', { class: 'step-say' }, `On your own tailnet as ${ts.dnsName || 'this node'}. Routes: ${(ts.approvedRoutes || []).join(', ') || 'none advertised'}.`)]
+  };
+}
+
+function privStepHttps(data) {
+  const p = data.privacy;
+  const a = p.applied || {};
+  if (a.tls === 'files') {
+    const t = p.tls || {};
+    const listening = p.https && p.https.listening;
+    const ok = t.ok && listening;
+    const url = privAddress(data);
+    return {
+      state: ok ? 'done' : 'bad', title: 'HTTPS — your certificate',
+      tag: ok ? `serving on :${a.httpsPort}` : 'needs fixing',
+      body: [
+        privTlsSummary(t),
+        !listening ? el('p', { class: 'join-msg is-bad' }, (p.https && p.https.error) || `Not listening on :${a.httpsPort} yet.`) : null,
+        ok && url ? copyRow(url) : null,
+        why('Renewals, and where the files go',
+          'Put the files in the data volume (for example /data/tls/) or mount a directory read-only, and give the paths above. When your ACME client replaces them, Tawny picks up the new certificate within a minute with no restart.',
+          'Both ends need to trust the certificate. A public CA (Let’s Encrypt through DNS-01 works for a name that only resolves inside your network) is trusted everywhere. Your own CA must be installed on every browser device, and the Android app will not accept it.')
+      ]
+    };
+  }
+  if (a.tls === 'tailscale') {
+    const sv = serveState(data.tailscale);
+    return {
+      state: data.tailscale.loggedIn && sv !== false && data.tailscale.dnsName ? 'done' : 'todo',
+      title: 'HTTPS — tailscale serve', tag: data.tailscale.dnsName || 'after the network step',
+      body: [el('p', { class: 'step-say' }, 'Your node’s ts.net name with a Let’s Encrypt certificate, provided by tailscale serve.')]
+    };
+  }
+  if (a.tls === 'proxy') {
+    return {
+      state: 'done', title: 'HTTPS — your reverse proxy', tag: 'not visible from here',
+      body: [
+        el('p', { class: 'step-say' }, `Point your proxy at http://${data.lan.ip || '<this machine>'}:${location.port || 8099}. Tawny cannot see it, so it cannot tell you whether it works. It needs to:`),
+        el('div', { class: 'step-do' }, el('ol', {},
+          el('li', {}, 'terminate TLS with a certificate your devices trust;'),
+          el('li', {}, 'pass WebSocket upgrades through (the app signals over /ws, and /lan/… for the LAN bridge);'),
+          el('li', {}, 'set X-Forwarded-Proto and X-Forwarded-Host.'))),
+        why('Caddy example', `tawny.example.net {\n  reverse_proxy ${data.lan.ip || '192.168.1.10'}:${location.port || 8099}\n}`)
+      ]
+    };
+  }
+  return {
+    state: 'done', title: 'HTTPS', tag: 'none — your choice',
+    body: [el('p', { class: 'step-say' }, 'No HTTPS. A browser will load the page but refuse to start a session, because camera and microphone need a secure address. The Android app on this Wi-Fi is unaffected.')]
+  };
+}
+
+function privStepRelays(data) {
+  const p = data.privacy;
+  const a = p.applied || {};
+  const bad = latestSteps(data.startup).filter((s) => s.ok === false && /^coturn/.test(s.step));
+  const turn = a.turnMode === 'never' ? 'never'
+    : [...(a.turnUrls || []), ...(a.turnEmbedded ? [`built-in coturn :${data.coturn.port || 3478}${a.turnTlsPort ? ` + TLS :${a.turnTlsPort}` : ''}`] : [])]
+      .join(', ') || 'none configured';
+  const lines = [
+    ['STUN', (a.stun || []).join(', ') || 'none'],
+    ['TURN', `${turn}${a.turnMode === 'always' ? ' — every call relayed' : ''}`],
+    ['Rendezvous', a.rendezvous || 'this server'],
+    ['LAN bridge', a.lanBridge ? 'on' : 'off'],
+    ['Tailscale logs', a.tailscale === 'off' ? '—' : a.tsLogs ? 'sent to Tailscale' : 'off']
+  ];
+  return {
+    state: bad.length ? 'bad' : 'done', title: 'Connections', tag: bad.length ? 'relay failed to start' : 'exactly what you chose',
+    body: [
+      el('div', { class: 'priv-cert' }, ...lines.map(([k, v]) => el('p', {}, el('b', {}, k + ': '), v))),
+      ...bad.map((s) => el('p', { class: 'join-msg is-bad' }, s.detail)),
+      (p.warnings || []).length ? why('What these choices give up', ...p.warnings) : null
+    ]
+  };
+}
+
+function privStepWatch(data, ready) {
+  const url = privAddress(data);
+  if (!ready) return { state: 'todo', title: 'Start watching', tag: 'once the steps above are done' };
+  return {
+    state: 'now', title: 'Start watching', tag: 'you’re ready',
+    body: [
+      el('p', { class: 'step-say' }, url
+        ? 'Open the address at the top of this page on the device you watch from.'
+        : 'Open this server through the https address your proxy or network provides.'),
+      el('div', { class: 'step-do' }, el('ol', {},
+        el('li', {}, 'On the camera phone: open Tawny, choose The Monitor. With the app’s own harder privacy on, give it the same rendezvous, STUN and TURN as here.'),
+        el('li', {}, 'On the viewing device: open the address, choose Viewer, and scan the phone’s code.')))
+    ]
+  };
+}
+
+function privacyDefs(data) {
+  const defs = [stepMachine(data), privStepNetwork(data), privStepHttps(data), privStepRelays(data)];
+  const ready = !data.privacy.broken && defs.every((d) => d.state === 'done');
+  defs.push(privStepWatch(data, ready));
+  if (data.privacy.broken) {
+    defs.unshift({
+      state: 'bad', title: 'Harder privacy settings', tag: 'could not be used',
+      body: [el('p', { class: 'step-say' }, 'The saved settings could not be read or have errors, so everything networked is off: no Tailscale, no relay, no STUN. Nothing fell back to the normal setup. Fix them in the panel below and restart.'),
+        ...latestSteps(data.startup).filter((s) => s.step === 'privacy' && !s.ok).map((s) => el('p', { class: 'join-msg is-bad' }, s.detail))]
+    });
+  }
+  return defs;
+}
+
+function renderPrivacyVerdict(data, defs) {
+  const box = document.getElementById('verdict');
+  const icon = document.getElementById('verdict-icon');
+  const title = document.getElementById('verdict-title');
+  const say = document.getElementById('verdict-say');
+  const extra = document.getElementById('verdict-extra');
+  extra.textContent = '';
+  const set = (cls, ico, h, t) => {
+    box.className = `verdict is-${cls}`;
+    icon.innerHTML = `<svg viewBox="0 0 24 24">${ico}</svg>`;
+    title.textContent = h;
+    say.textContent = t;
+  };
+  const failed = defs.some((d) => d.state === 'bad');
+  const waiting = defs.slice(0, -1).some((d) => d.state === 'now' || d.state === 'todo');
+  if (!failed && !waiting) {
+    finishUrl = privAddress(data);
+    setupComplete = !!finishUrl;
+    set('ok', ICONS.tick, 'Ready, on your own infrastructure',
+      'Harder privacy is on. Everything you chose is running, with no fallbacks. Whether a viewer outside can reach this network is up to your own setup.');
+    if (finishUrl) extra.append(openLink(finishUrl));
+    return;
+  }
+  setupComplete = false;
+  if (failed) {
+    set('bad', ICONS.cross, 'Something you chose is not working',
+      'Harder privacy is on, so nothing takes over for it. The step marked below says what failed.');
+    return;
+  }
+  set('warn', ICONS.bang, 'Harder privacy is on — not finished yet',
+    'Follow the open step below. Everything else is exactly what you chose.');
+}
+
 /* ---------------------------------------------------------------- verdict */
 
 function renderVerdict(data, defs) {
@@ -1171,7 +1690,9 @@ function render(data) {
   if (joinBusy || routeBusy || (keyIn && document.activeElement === keyIn)) return;
   const carried = keyIn ? keyIn.value : '';
 
-  const defs = [stepMachine(data), stepConnect(data), stepRoute(data), stepDevices(data), stepWatch(data)];
+  const privOn = !!(data.privacy && data.privacy.active);
+  const defs = privOn ? privacyDefs(data)
+    : [stepMachine(data), stepConnect(data), stepRoute(data), stepDevices(data), stepWatch(data)];
 
   // Exactly one step is the card. Several steps can legitimately be actionable
   // at once — "add your devices" and "start watching" both open the moment the
@@ -1197,13 +1718,15 @@ function render(data) {
   // than no control.
   document.getElementById('setup-back').hidden = openIdx === 0;
   renderProgress(defs);
-  renderVerdict(data, defs);
+  if (privOn) renderPrivacyVerdict(data, defs);
+  else renderVerdict(data, defs);
+  renderPrivacy(data, false);
 
   const fresh = document.getElementById('join-key');
   if (fresh && carried) fresh.value = carried;
 
   // Only worth offering once we know there is nothing to finish here.
-  document.getElementById('skip-line').hidden = data.tailscale.loggedIn;
+  document.getElementById('skip-line').hidden = data.tailscale.loggedIn || privOn;
 
   const coturn = data.coturn || {};
   if (coturn.embedded && !coturn.listening) {

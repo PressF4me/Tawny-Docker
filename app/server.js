@@ -5,13 +5,15 @@
 // side from a secret the server never receives. See SECURITY.md.
 
 import http from 'node:http';
+import https from 'node:https';
 import net from 'node:net';
+import tls from 'node:tls';
 import { readFile } from 'node:fs/promises';
-import { readFileSync, existsSync, writeFileSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync, watchFile } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { join, extname, normalize, sep, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomUUID, createHash, createHmac } from 'node:crypto';
+import { randomUUID, createHash, createHmac, X509Certificate, createPrivateKey } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import { PRIVACY_HTML, PRIVACY_HEADERS } from './rendezvous/privacy.js';
 import {
@@ -21,6 +23,10 @@ import {
 import {
   findRouteConflicts, findRouteCoverage, mergeRoutes, withoutRoute
 } from './docker/route-conflict.js';
+import {
+  PRIVACY_FILE, DEFAULTS as PRIVACY_DEFAULTS, validate as validatePrivacy,
+  readPrivacy, writePrivacy, redact as redactPrivacy
+} from './docker/privacy.js';
 
 const PORT = Number(process.env.PORT || 8099);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -57,6 +63,29 @@ const TRUST_PROXY = process.env.TRUST_PROXY !== 'off';
 // use-auth-secret (static-auth-secret === TURN_SECRET).
 const RENDEZVOUS_URL = process.env.RENDEZVOUS_URL || '';
 const TURN_MODE = process.env.TURN_MODE || 'auto';
+
+// ------------------------------------------------------- harder privacy
+//
+// Set by docker/entrypoint.sh from /data/privacy.json (docker/privacy.js) when
+// the operator switched it on at /setup. Everything below that reads the
+// environment already honours the choices — STUN_URLS=off, TS_SERVE=off and so
+// on are the same variables either way. What only exists in this mode:
+//
+//   - a TLS listener of our own, with the operator's certificate files;
+//   - TURN "never" (no /turn, no relay handed out) and TURN over TLS;
+//   - the LAN bridge as something that can be switched off;
+//   - config.json telling the page `strict`, so it trusts no default either.
+const PRIVACY_ON = process.env.TAWNY_PRIVACY === 'on';
+const PRIVACY_BROKEN = process.env.TAWNY_PRIVACY_BROKEN === 'on';
+const TLS_CERT = process.env.TAWNY_TLS_CERT || '';
+const TLS_KEY = process.env.TAWNY_TLS_KEY || '';
+const HTTPS_PORT = Number(process.env.TAWNY_HTTPS_PORT || 8443);
+const TURN_TLS_PORT = Number(process.env.TAWNY_TURN_TLS_PORT || 0);
+const LAN_BRIDGE = process.env.TAWNY_LAN_BRIDGE !== 'off';
+const TS_LOGIN_SERVER = process.env.TS_LOGIN_SERVER || '';
+// What the privacy file said when this process started. A different file now
+// means /setup saved something that is not running yet.
+const PRIVACY_AT_BOOT = (() => { try { return readFileSync(PRIVACY_FILE, 'utf8'); } catch { return ''; } })();
 
 // TURN. Two flavours, tried in this order by turnCreds():
 //
@@ -336,7 +365,7 @@ function reqHostname(req) {
  */
 async function turnCreds(req) {
   const ttl = 3600;
-  if (!TURN_SECRET) return null;
+  if (!TURN_SECRET || TURN_MODE === 'never') return null;
 
   let urls = TURN_URLS;
   if (!urls.length && TURN_EMBEDDED) {
@@ -348,6 +377,10 @@ async function turnCreds(req) {
     // Both transports: UDP is what actually relays media, TCP is the fallback
     // for a network that blocks UDP outright (some corporate wifi, some hotels).
     urls = [`turn:${h}:${TURN_PORT}`, `turn:${h}:${TURN_PORT}?transport=tcp`];
+    // TURN over TLS, when harder privacy gave coturn the operator's
+    // certificate. Named by the certificate's host, not an IP, or the TLS
+    // handshake would fail on name mismatch.
+    if (TURN_TLS_PORT) urls.push(`turns:${h}:${TURN_TLS_PORT}?transport=tcp`);
   }
   if (!urls.length) return null;
 
@@ -736,7 +769,8 @@ async function setupStatus() {
     startup,
     tailscale,
     lan: lanInfo(),
-    coturn
+    coturn,
+    privacy: privacyInfo()
   };
 }
 
@@ -763,7 +797,11 @@ function setupSkipped() {
 
 // Tailscale's own key prefix. Checked before the key reaches a command line so
 // a typo produces a sentence rather than a 30-second timeout against nothing.
-const AUTHKEY_RE = /^tskey-[A-Za-z0-9._~-]{8,256}$/;
+// A Headscale pre-auth key has no such prefix, so with a login server of the
+// operator's own only the character set is held.
+const AUTHKEY_RE = TS_LOGIN_SERVER
+  ? /^[A-Za-z0-9._~-]{8,256}$/
+  : /^tskey-[A-Za-z0-9._~-]{8,256}$/;
 
 /**
  * Only a machine on the operator's own network may complete first-run setup.
@@ -819,6 +857,8 @@ async function joinTailnet(key) {
     `--socket=${TAWNY_TS_SOCKET}`, 'up',
     `--authkey=${key}`,
     `--hostname=${process.env.TAWNY_TS_HOSTNAME || 'tawny'}`,
+    // A self-hosted control server (Headscale) chosen under harder privacy.
+    ...(TS_LOGIN_SERVER ? [`--login-server=${TS_LOGIN_SERVER}`] : []),
     // --timeout so a control-plane stall returns a classifiable error instead
     // of blocking until our execFile SIGTERM (whose message leaks the argv).
     '--accept-dns=false', '--accept-routes=false', '--timeout=60s'
@@ -1019,6 +1059,7 @@ function anyStepFailing(startup, ts) {
  * office. Mirrors the same test in public/setup.js.
  */
 function setupReady(s) {
+  if (s.privacy && s.privacy.active) return privacyReady(s);
   const ts = s.tailscale || {};
   const lan = s.lan || {};
   if (anyStepFailing(s.startup, ts)) return false;
@@ -1056,6 +1097,170 @@ function setupReady(s) {
   return true;
 }
 
+// ------------------------------------------------------- harder privacy
+
+let rootCerts = null;
+/** Mozilla's roots as bundled with Node — what "publicly trusted" means here. */
+function publicRoots() {
+  if (!rootCerts) {
+    rootCerts = [];
+    for (const pem of tls.rootCertificates) {
+      try { rootCerts.push(new X509Certificate(pem)); } catch { /* skip one bad entry */ }
+    }
+  }
+  return rootCerts;
+}
+
+/**
+ * Read the operator's certificate the way a client would judge it: does the
+ * key match, which names does it cover, when does it run out, and does it
+ * chain to a public root. That last one is what the Android app needs — its
+ * WebView trusts the system store only — so /setup says so before anyone finds
+ * out from a phone that will not connect.
+ */
+function tlsCheck(certPath, keyPath) {
+  const out = { cert: certPath, key: keyPath, ok: false };
+  let pem, keyPem;
+  try { pem = readFileSync(certPath, 'utf8'); } catch (e) {
+    out.error = `Cannot read ${certPath} (${e.code || e.message}). Put it in the data volume, or mount it, and make it readable.`;
+    return out;
+  }
+  try { keyPem = readFileSync(keyPath, 'utf8'); } catch (e) {
+    out.error = `Cannot read ${keyPath} (${e.code || e.message}). Put it in the data volume, or mount it, and make it readable.`;
+    return out;
+  }
+  const blocks = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g) || [];
+  if (!blocks.length) { out.error = `${certPath} holds no PEM certificate.`; return out; }
+  let chain;
+  try { chain = blocks.map((b) => new X509Certificate(b)); } catch (e) {
+    out.error = `${certPath} could not be parsed: ${e.message}`;
+    return out;
+  }
+  const leaf = chain[0];
+  out.subject = leaf.subject.replace(/\n/g, ', ');
+  out.issuer = leaf.issuer.replace(/\n/g, ', ');
+  out.names = String(leaf.subjectAltName || '').split(/,\s*/)
+    .map((n) => n.replace(/^(DNS|IP Address):/, '')).filter(Boolean);
+  out.notAfter = new Date(leaf.validTo).toISOString();
+  out.daysLeft = Math.floor((Date.parse(leaf.validTo) - Date.now()) / 86_400_000);
+  out.chainLength = chain.length;
+  try { out.keyMatches = leaf.checkPrivateKey(createPrivateKey(keyPem)); } catch (e) {
+    out.keyMatches = false;
+    out.keyError = e.message;
+  }
+  out.selfSigned = leaf.subject === leaf.issuer;
+  const top = chain[chain.length - 1];
+  out.publicTrust = publicRoots().some((r) =>
+    r.fingerprint256 === top.fingerprint256 ||
+    (top.checkIssued(r) && (() => { try { return top.verify(r.publicKey); } catch { return false; } })()));
+  out.ok = !!out.keyMatches && out.daysLeft >= 0;
+  if (!out.keyMatches) out.error = `The key in ${keyPath} does not belong to this certificate.`;
+  else if (out.daysLeft < 0) out.error = `This certificate expired on ${out.notAfter.slice(0, 10)}.`;
+  return out;
+}
+
+// The HTTPS listener's own state, set where it starts (bottom of this file).
+const httpsState = { wanted: !!(TLS_CERT && TLS_KEY), listening: false, error: '', port: HTTPS_PORT };
+
+/**
+ * What is running now, read off this process's environment rather than the
+ * file — the file may hold something newer that a restart has not applied.
+ */
+function privacyApplied(saved) {
+  const tsOff = process.env.TS_DISABLE === 'on';
+  return {
+    tailscale: tsOff ? 'off' : (TAWNY_TS_MODE === 'none' ? (process.env.TS_MODE_WANTED || 'off') : TAWNY_TS_MODE),
+    loginServer: TS_LOGIN_SERVER,
+    tsLogs: process.env.TS_NO_LOGS !== 'on',
+    tls: TLS_CERT ? 'files'
+      : (process.env.TS_SERVE !== 'off' && !tsOff) ? 'tailscale'
+      : (saved && saved.tls === 'none' ? 'none' : 'proxy'),
+    httpsPort: TLS_CERT ? HTTPS_PORT : null,
+    stun: STUN,
+    turnMode: TURN_MODE,
+    turnEmbedded: TURN_EMBEDDED,
+    turnTlsPort: TURN_TLS_PORT || null,
+    turnUrls: TURN_URLS,
+    publicIp: PUBLIC_HOST || process.env.TAWNY_PUBLIC_IP || '',
+    rendezvous: RENDEZVOUS_URL,
+    lanBridge: LAN_BRIDGE,
+    allowedHosts: ALLOWED_HOSTS,
+    trustProxy: TRUST_PROXY
+  };
+}
+
+/**
+ * The form's starting point the first time someone opens the panel: what this
+ * container is running now, minus the defaults harder privacy exists to drop —
+ * no public STUN, no Tailscale log upload.
+ */
+function privacyStartingPoint() {
+  return {
+    ...PRIVACY_DEFAULTS,
+    tailscale: TAWNY_TS_MODE === 'host' ? 'host' : TAWNY_TS_MODE === 'own' ? 'own' : 'off',
+    tls: TAWNY_TS_MODE === 'none' ? 'proxy' : (process.env.TS_SERVE === 'off' ? 'proxy' : 'tailscale'),
+    stun: [],
+    turnEmbedded: TURN_EMBEDDED,
+    turnPort: TURN_PORT,
+    turnUrls: TURN_URLS,
+    publicIp: process.env.TAWNY_PUBLIC_IP || '',
+    turnMode: ['auto', 'always', 'never'].includes(TURN_MODE) ? TURN_MODE : 'auto',
+    rendezvous: RENDEZVOUS_URL,
+    allowedHosts: ALLOWED_HOSTS,
+    trustProxy: TRUST_PROXY
+  };
+}
+
+function privacyInfo() {
+  const raw = readPrivacy();
+  const broken = !!(raw && raw._broken);
+  const checked = raw && !broken ? validatePrivacy(raw) : null;
+  let nowText = '';
+  try { nowText = readFileSync(PRIVACY_FILE, 'utf8'); } catch { /* none */ }
+  const saved = checked ? checked.value : null;
+  // Check the certificate that is saved, running or not, so the operator sees
+  // a bad path before they restart into it.
+  const tlsFiles = saved && saved.tls === 'files' ? [saved.tlsCert, saved.tlsKey]
+    : TLS_CERT ? [TLS_CERT, TLS_KEY] : null;
+  return {
+    file: PRIVACY_FILE,
+    active: PRIVACY_ON,
+    broken: PRIVACY_BROKEN || broken,
+    savedEnabled: !!(saved && saved.enabled),
+    saved: saved ? redactPrivacy(saved) : null,
+    savedErrors: checked && !checked.ok ? checked.errors : null,
+    warnings: checked ? checked.warnings : [],
+    startingPoint: redactPrivacy(privacyStartingPoint()),
+    pendingRestart: nowText !== PRIVACY_AT_BOOT,
+    canRestart: !!TAWNY_SETUP_STATE,
+    applied: PRIVACY_ON ? privacyApplied(saved) : null,
+    tls: tlsFiles ? tlsCheck(tlsFiles[0], tlsFiles[1]) : null,
+    https: { ...httpsState }
+  };
+}
+
+/**
+ * setupReady() for a deployment on the operator's own networking. There is no
+ * one topology to hold it to, so "finished" means: every piece they chose is
+ * up — the node they picked is signed in, the certificate they gave is served —
+ * and nothing that ran at boot failed. Whether a viewer outside can reach this
+ * network is theirs; it is not something this process can see.
+ */
+function privacyReady(s) {
+  const p = s.privacy || {};
+  const ts = s.tailscale || {};
+  const a = p.applied || {};
+  if (p.broken) return false;
+  if (anyStepFailing(s.startup, ts)) return false;
+  if (a.tailscale && a.tailscale !== 'off') {
+    if (!ts.configured || !ts.loggedIn) return false;
+    if ((ts.pendingRoutes || []).length) return false;
+  }
+  if (a.tls === 'files' && !(p.tls && p.tls.ok && p.https && p.https.listening)) return false;
+  if (a.tls === 'tailscale' && (!ts.dnsName || ts.serving === false)) return false;
+  return true;
+}
+
 // ------------------------------------------------------------------ http
 
 const handler = async (req, res) => {
@@ -1064,7 +1269,8 @@ const handler = async (req, res) => {
   // itself (own network only) so the setup page can act without a file edit
   // and a restart.
   const setupPost = req.method === 'POST' && req.url &&
-    ['/setup/join', '/setup/skip', '/setup/ts-reset', '/setup/route/advertise', '/setup/route/withdraw']
+    ['/setup/join', '/setup/skip', '/setup/ts-reset', '/setup/route/advertise', '/setup/route/withdraw',
+      '/setup/privacy', '/setup/privacy/restart']
       .includes(req.url.split('?')[0]);
   if (req.method !== 'GET' && req.method !== 'HEAD' && !setupPost) {
     res.writeHead(405, secureHeaders({ allow: 'GET, HEAD' }));
@@ -1086,7 +1292,13 @@ const handler = async (req, res) => {
     const rendezvous = RENDEZVOUS_URL ||
       (host ? `${proto === 'https' ? 'wss' : 'ws'}://${host}` : '');
     return json(res, 200, {
-      stun: STUN, turnMode: TURN_MODE, rendezvous, authRequired: false
+      stun: STUN,
+      // The page's own policy has no "never"; it gets auto plus no TURN at all.
+      turnMode: TURN_MODE,
+      rendezvous, authRequired: false,
+      // Harder privacy: the page must not substitute a default for anything
+      // listed here — an empty STUN list means none.
+      ...(PRIVACY_ON ? { strict: true, turnFetch: TURN_MODE !== 'never' } : {})
     });
   }
   if (url.pathname === '/healthz') {
@@ -1220,6 +1432,62 @@ const handler = async (req, res) => {
     setupCache = { at: 0, value: null };
     return json(res, ok ? 200 : 502, { ok });
   }
+  // Harder privacy: save the operator's own networking. Refused from outside
+  // the operator's network like every other /setup action, and — the first
+  // time it is switched on — refused without the acknowledgement the page asks
+  // for, so no script or stray click turns the fallbacks off unread.
+  if (url.pathname === '/setup/privacy') {
+    if (req.method !== 'POST') return json(res, 405, { error: 'POST only' });
+    if (!fromLocalNetwork(req)) {
+      return json(res, 403, { error: 'Only from your own network.' });
+    }
+    const body = await readJsonBody(req, 32768);
+    if (!body || typeof body.config !== 'object' || !body.config) {
+      return json(res, 400, { error: 'Expected { config: {...} }.' });
+    }
+    const prevRaw = readPrivacy();
+    const prev = prevRaw && !prevRaw._broken ? prevRaw : {};
+    const r = validatePrivacy(body.config, prev);
+    if (r.value.enabled && !prev.enabled && body.acknowledge !== true) {
+      return json(res, 400, {
+        error: 'Turning off every fallback needs the acknowledgement on the page.',
+        needsAcknowledge: true, warnings: r.warnings
+      });
+    }
+    // Invalid settings may be *kept* while the mode is off (so switching it
+    // back on starts where the operator left it), never run.
+    if (!r.ok && r.value.enabled) {
+      return json(res, 400, { error: 'Some settings need fixing.', errors: r.errors, warnings: r.warnings });
+    }
+    try {
+      writePrivacy({ ...r.value, savedAt: new Date().toISOString() });
+    } catch (e) {
+      return json(res, 500, { error: `Could not write ${PRIVACY_FILE}: ${e.message}` });
+    }
+    setupCache = { at: 0, value: null };
+    log(`privacy: settings saved (enabled=${r.value.enabled}) — restart to apply`);
+    return json(res, 200, { ok: true, saved: redactPrivacy(r.value), warnings: r.warnings, restartNeeded: true });
+  }
+  // Apply saved settings: the entrypoint's supervisor loop re-runs itself from
+  // the top when this file appears (it owns tailscaled and coturn; this
+  // process does not). The container never exits, so no restart policy is
+  // involved.
+  if (url.pathname === '/setup/privacy/restart') {
+    if (req.method !== 'POST') return json(res, 405, { error: 'POST only' });
+    if (!fromLocalNetwork(req)) {
+      return json(res, 403, { error: 'Only from your own network.' });
+    }
+    if (!TAWNY_SETUP_STATE) {
+      return json(res, 503, { error: 'Not running under the container entrypoint — restart it yourself.' });
+    }
+    try {
+      writeFileSync(join(RUN_DIR, 'restart.req'), new Date().toISOString());
+      log('privacy: restart requested from /setup');
+      return json(res, 202, { ok: true, restarting: true });
+    } catch (e) {
+      return json(res, 500, { error: 'Could not ask for a restart: ' + String(e && e.message || e) });
+    }
+  }
   if (url.pathname === '/setup') {
     try {
       const body = await readFile(join(PUBLIC, 'setup.html'));
@@ -1262,7 +1530,7 @@ const handler = async (req, res) => {
   if (url.pathname === '/turn') {
     const room = String(url.searchParams.get('room') || '');
     if (!ROOM_RE.test(room)) return json(res, 400, { error: 'bad room' });
-    const haveTurn = TURN_SECRET && (TURN_URLS.length || TURN_EMBEDDED);
+    const haveTurn = TURN_SECRET && (TURN_URLS.length || TURN_EMBEDDED) && TURN_MODE !== 'never';
     if (!haveTurn) return json(res, 404, { error: 'no turn configured' });
     // Must present a ticket valid for this room — no free credential farming.
     // Checked before minting anything, so an unpaired caller cannot get a
@@ -1455,6 +1723,8 @@ const onUpgrade = (req, socket, head) => {
 
   const lan = LAN_BRIDGE_RE.exec(url.pathname);
   if (lan) {
+    // Switched off under harder privacy: this server then never dials anything.
+    if (!LAN_BRIDGE) return deny(404, 'Not Found');
     if (!hostAllowed(req)) return deny(421, 'Misdirected Request');
     if (!originAllowed(req)) { noteFail(ip); return deny(403, 'Forbidden'); }
     if (lockedOut(ip)) return deny(429, 'Too Many Requests');
@@ -1664,6 +1934,31 @@ const httpServer = http.createServer(handler);
 httpServer.on('upgrade', onUpgrade);
 servers.push({ s: httpServer, port: PORT, scheme: 'http' });
 
+// Harder privacy with "my own certificate": a second listener, TLS terminated
+// here, with the operator's files. The plain one stays for /setup on the LAN.
+// A certificate that cannot be loaded does not stop the container — /setup has
+// to stay up to say why — and it does not fall back to anything either: there
+// is simply no https listener until the files are right.
+if (TLS_CERT && TLS_KEY) {
+  const load = () => ({ cert: readFileSync(TLS_CERT), key: readFileSync(TLS_KEY) });
+  try {
+    const httpsServer = https.createServer(load(), handler);
+    httpsServer.on('upgrade', onUpgrade);
+    servers.push({ s: httpsServer, port: HTTPS_PORT, scheme: 'https', optional: true });
+    // Renewals (certbot, acme.sh, a cron copy) replace the files in place;
+    // pick them up without a restart.
+    const reload = () => {
+      try { httpsServer.setSecureContext(load()); httpsState.error = ''; log(`tls: reloaded ${TLS_CERT}`); }
+      catch (e) { httpsState.error = `reload failed: ${e.message}`; log(`tls: ${httpsState.error}`); }
+    };
+    watchFile(TLS_CERT, { interval: 60_000 }, reload);
+    watchFile(TLS_KEY, { interval: 60_000 }, reload);
+  } catch (e) {
+    httpsState.error = `Could not load the certificate: ${e.message}`;
+    log(`tls: ${httpsState.error} — no https listener`);
+  }
+}
+
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => {
     clearInterval(heartbeat);
@@ -1674,19 +1969,34 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
   });
 }
 
+function logSummary() {
+  if (PRIVACY_ON) log(`harder privacy: ON${PRIVACY_BROKEN ? ' (settings unreadable — everything networked is off)' : ''} — no fallbacks`);
+  log(`allowed hosts: ${ALLOWED_HOSTS.length ? ALLOWED_HOSTS.join(', ') : 'any (set ALLOWED_HOSTS to pin)'}`);
+  log(`stun: ${STUN.length ? STUN.join(', ') : 'none (LAN / tailnet only)'}`);
+  log(`rendezvous: ${RENDEZVOUS_URL || 'derived from each request Host header'}`);
+  log(LAN_BRIDGE ? `lan bridge: /lan/<private-ipv4>/<port>/ws -> the app's own relay` : 'lan bridge: off');
+  log(`turn: ${
+    TURN_MODE === 'never' ? 'never (harder privacy)'
+      : TURN_URLS.length ? `${TURN_URLS.join(', ')}${TURN_SECRET ? '' : ' (NO SECRET — /turn will 404)'}`
+      : TURN_EMBEDDED && TURN_SECRET ? `embedded coturn on :${TURN_PORT}${TURN_TLS_PORT ? ` (+TLS :${TURN_TLS_PORT})` : ''}, host from each request${PUBLIC_HOST ? ` (pinned to ${PUBLIC_HOST})` : ''}`
+      : 'none — peer-to-peer only'
+  }`);
+}
+
 let pending = servers.length;
-for (const { s, port, scheme } of servers) {
+for (const { s, port, scheme, optional } of servers) {
+  if (optional) {
+    // A taken port for the operator's https listener is reported at /setup,
+    // not allowed to take the plain listener (and /setup) down with it.
+    s.on('error', (e) => {
+      httpsState.error = `Could not listen on ${port}: ${e.code || e.message}`;
+      log(`tls: ${httpsState.error}`);
+      if (--pending === 0) logSummary();
+    });
+  }
   s.listen(port, HOST, () => {
     log(`tawny listening on ${scheme}://${HOST}:${port}`);
-    if (--pending) return;
-    log(`allowed hosts: ${ALLOWED_HOSTS.length ? ALLOWED_HOSTS.join(', ') : 'any (set ALLOWED_HOSTS to pin)'}`);
-    log(`stun: ${STUN.length ? STUN.join(', ') : 'none (LAN / tailnet only)'}`);
-    log(`rendezvous: ${RENDEZVOUS_URL || 'derived from each request Host header'}`);
-    log(`lan bridge: /lan/<private-ipv4>/<port>/ws -> the app's own relay`);
-    log(`turn: ${
-      TURN_URLS.length ? `${TURN_URLS.join(', ')}${TURN_SECRET ? '' : ' (NO SECRET — /turn will 404)'}`
-        : TURN_EMBEDDED && TURN_SECRET ? `embedded coturn on :${TURN_PORT}, host from each request${PUBLIC_HOST ? ` (pinned to ${PUBLIC_HOST})` : ''}`
-        : 'none — peer-to-peer only'
-    }`);
+    if (scheme === 'https') httpsState.listening = true;
+    if (--pending === 0) logSummary();
   });
 }
