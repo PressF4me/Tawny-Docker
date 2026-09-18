@@ -85,6 +85,21 @@
   --safe-b: env(safe-area-inset-bottom, 0px);
   /* hairline around the live-view control keys; sits on --panel */
   --ctl-line: #e6dad3;
+
+  /* The welcome pets (scene.js): CritterScene's palette in MainActivity.kt.
+     Fixed rather than derived from the accents — the dog is biscuit and the
+     tongue is pink in either theme. */
+  --pet-dark: 0;
+  --pet-cream: #f1e7d3;
+  --pet-cream-hi: #fdf8ee;
+  --pet-cream-lo: #ddccad;
+  --pet-biscuit: #d59e6b;
+  --pet-biscuit-lo: #bb8453;
+  --pet-dove: #c2b8a5;
+  --pet-ink: #3c2a1e;
+  --pet-edge: #48331e;
+  --pet-hair: var(--dim);
+  --pet-tongue: #e8728f;
 }
 
 /* DARK — "brushed leather", neutral warm-bronze accent (never pink).
@@ -110,6 +125,16 @@
        the light palette's relationship inverts here. See :root. */
     --accent-ink: var(--berry);
     --live-ink:   var(--live);
+    --pet-dark: 1;
+    --pet-cream: #e7dbc1;
+    --pet-cream-hi: #f4ead5;
+    --pet-cream-lo: #c9b790;
+    --pet-biscuit: #cc9a63;
+    --pet-biscuit-lo: #a9784a;
+    --pet-dove: #b6ad99;
+    --pet-ink: #2e2116;
+    --pet-edge: #3a2a1b;
+    --pet-hair: #5b4634;
   }
 }
 :root[data-theme="dark"] {
@@ -129,6 +154,16 @@
   --ctl-line: #4a3b2b;
   --accent-ink: var(--berry);
   --live-ink:   var(--live);
+  --pet-dark: 1;
+  --pet-cream: #e7dbc1;
+  --pet-cream-hi: #f4ead5;
+  --pet-cream-lo: #c9b790;
+  --pet-biscuit: #cc9a63;
+  --pet-biscuit-lo: #a9784a;
+  --pet-dove: #b6ad99;
+  --pet-ink: #2e2116;
+  --pet-edge: #3a2a1b;
+  --pet-hair: #5b4634;
 }
 
 * { box-sizing: border-box; }
@@ -2122,52 +2157,19 @@ body.dimmed #theme-toggle { display: none; }
   line-height: 1.45;              /* Type.LEAD_BODY */
 }
 
-/* animated cat + dog */
+/* The welcome trio: a cat, Tawny the owlet and a dog, drawn on a canvas by
+   scene.js (a port of the native PetSceneView). */
 
 .scene {
   width: min(74vw, 300px);
+  aspect-ratio: 260 / 188;   /* the scene plus scene.js's HEAD of sky */
   height: auto;
   display: block;
   margin: 0 auto;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.scene * { transform-box: fill-box; }
-
-.scene-cat { animation: bob 4.5s ease-in-out infinite; transform-origin: 50% 100%; }
-.scene-dog { animation: bob 3.8s ease-in-out infinite .4s; transform-origin: 50% 100%; }
-
-.scene .eye {
-  transform-origin: 50% 50%;
-  animation: blink 4s ease-in-out infinite;
-}
-.scene-dog .eye { animation-delay: 1.7s; }
-
-#cat-tail { transform-origin: 0% 100%; animation: swish 3.4s ease-in-out infinite; }
-#dog-tail { transform-origin: 100% 100%; animation: wag .8s ease-in-out infinite; }
-
-.cat-ear { transform-origin: 50% 100%; animation: twitch 5s ease-in-out infinite; }
-.cat-ear + .cat-ear { animation-delay: 2.6s; }
-
-@keyframes blink {
-  0%, 90%, 100% { transform: scaleY(1); }
-  95%           { transform: scaleY(.15); }
-}
-@keyframes swish {
-  0%, 100% { transform: rotate(-10deg); }
-  50%      { transform: rotate(14deg); }
-}
-@keyframes wag {
-  0%, 100% { transform: rotate(-17deg); }
-  50%      { transform: rotate(17deg); }
-}
-@keyframes bob {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-4px); }
-}
-@keyframes twitch {
-  0%, 88%, 100% { transform: rotate(0); }
-  93%           { transform: rotate(-7deg); }
-}
 
 /* the role picker */
 

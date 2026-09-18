@@ -27,46 +27,9 @@
 <main id="welcome" class="screen app hero" tabindex="-1" hidden>
   <div class="screen-body">
    <div class="wrap">
-  <svg class="scene" viewBox="0 0 260 170" aria-hidden="true">
-    <line x1="30" y1="146" x2="230" y2="146" stroke="#ece0da" stroke-width="2" stroke-linecap="round"/>
-
-    <g class="scene-cat">
-      <path id="cat-tail" d="M96 138 C 128 140 140 110 128 90 C 122 80 111 79 107 88"
-            fill="none" stroke="#e86a83" stroke-width="7" stroke-linecap="round"/>
-      <path d="M66 140 C 58 96 70 74 88 74 C 106 74 118 96 110 140 Z"
-            fill="#ffffff" stroke="#e86a83" stroke-width="4"/>
-      <circle cx="88" cy="64" r="26" fill="#ffffff" stroke="#e86a83" stroke-width="4"/>
-      <path class="cat-ear" d="M68 48 L62 24 L84 42 Z"
-            fill="#ffffff" stroke="#e86a83" stroke-width="4" stroke-linejoin="round"/>
-      <path class="cat-ear" d="M108 48 L114 24 L92 42 Z"
-            fill="#ffffff" stroke="#e86a83" stroke-width="4" stroke-linejoin="round"/>
-      <ellipse class="eye" cx="80" cy="62" rx="3.2" ry="5" fill="#7fb6d9"/>
-      <ellipse class="eye" cx="96" cy="62" rx="3.2" ry="5" fill="#7fb6d9"/>
-      <path d="M88 70 l-4 4 h8 z" fill="#e86a83"/>
-      <g stroke="#c9c2cc" stroke-width="2" stroke-linecap="round">
-        <line x1="72" y1="72" x2="52" y2="68"/>
-        <line x1="72" y1="77" x2="52" y2="79"/>
-        <line x1="104" y1="72" x2="124" y2="68"/>
-        <line x1="104" y1="77" x2="124" y2="79"/>
-      </g>
-    </g>
-
-    <g class="scene-dog">
-      <path id="dog-tail" d="M164 140 C 150 138 145 118 150 106"
-            fill="none" stroke="#e86a83" stroke-width="7" stroke-linecap="round"/>
-      <path d="M150 140 C 144 100 156 80 176 80 C 196 80 208 100 202 140 Z"
-            fill="#ffffff" stroke="#e86a83" stroke-width="4"/>
-      <circle cx="176" cy="74" r="24" fill="#ffffff" stroke="#e86a83" stroke-width="4"/>
-      <path class="dog-ear" d="M158 56 C 147 58 145 84 156 92 C 162 82 161 64 165 58 Z"
-            fill="#ffffff" stroke="#e86a83" stroke-width="4" stroke-linejoin="round"/>
-      <path class="dog-ear" d="M194 56 C 205 58 207 84 196 92 C 190 82 191 64 187 58 Z"
-            fill="#ffffff" stroke="#e86a83" stroke-width="4" stroke-linejoin="round"/>
-      <ellipse cx="176" cy="86" rx="12" ry="9" fill="#44434f" stroke="#e86a83" stroke-width="3"/>
-      <circle class="eye" cx="168" cy="72" r="3.4" fill="#7fb6d9"/>
-      <circle class="eye" cx="184" cy="72" r="3.4" fill="#7fb6d9"/>
-      <circle cx="176" cy="82" r="3.5" fill="#e86a83"/>
-    </g>
-  </svg>
+  <!-- The cat, Tawny the owlet and the dog: drawn by scene.js, a port of the
+       native PetSceneView. Tap one and it reacts. -->
+  <canvas class="scene pet-scene" width="520" height="376" aria-hidden="true"></canvas>
 
   <header class="brand">
     <div>
@@ -683,6 +646,7 @@
 <!-- QR decoder for the in-browser scanner. Bundled (no CDN). Used only when the
      native BarcodeDetector API is missing — i.e. desktop Chromium/Brave/Firefox. -->
 <script src="vendor/jsqr.js"></script>
+<script src="scene.js" defer></script>
 <script src="app.js" type="module"></script>
 </body>
 </html>
