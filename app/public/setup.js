@@ -1055,7 +1055,7 @@ function stepWatch(data) {
   };
 }
 
-/* --------------------------------------------------------- harder privacy */
+/* --------------------------------------------------------- tighter privacy */
 //
 // The panel under the steps, and — once it is running — the steps themselves.
 //
@@ -1233,14 +1233,14 @@ function renderPrivacy(data, force) {
 
   host.append(el('div', { class: 'priv-head' },
     el('div', {},
-      el('h2', { id: 'priv-title' }, 'For harder privacy ', el('span', { class: 'priv-tag' }, '[advanced]')),
+      el('h2', { id: 'priv-title' }, 'For tighter privacy ', el('span', { class: 'priv-tag' }, '[advanced]')),
       el('p', { class: 'priv-sub' }, 'Your own infrastructure, every connection chosen by you, and no fallbacks.')),
     sw));
 
   // What is running, as opposed to what the switch is showing.
   const running = p.active
-    ? (p.broken ? 'Running now: harder privacy, but the saved settings could not be used — everything networked is OFF until you fix and save them.'
-      : 'Running now: harder privacy. Only the settings below are in use.')
+    ? (p.broken ? 'Running now: tighter privacy, but the saved settings could not be used — everything networked is OFF until you fix and save them.'
+      : 'Running now: tighter privacy. Only the settings below are in use.')
     : 'Running now: the normal setup (Tailscale, with safety nets).';
   host.append(el('p', { class: `priv-running${p.active ? ' is-on' : ''}${p.broken ? ' is-bad' : ''}` }, running));
 
@@ -1274,7 +1274,7 @@ function renderPrivacy(data, force) {
         el('li', {}, el('b', {}, 'No fallbacks. '), 'If a setting here is wrong, or a server of yours is down, the part it covers does not work. Tawny will not switch to Tailscale, public STUN or its own relay to rescue it.'),
         el('li', {}, el('b', {}, 'Blank means none. '), 'Blank STUN is no STUN. No TURN means no relay. No Tailscale means nothing here gets a viewer outside your house into this network. That becomes your VPN, WireGuard, port forward or other tool, and Tawny cannot check it.'),
         el('li', {}, el('b', {}, 'Browsers need HTTPS. '), 'Camera and microphone only work on a secure page. With no certificate, or one a device does not trust, browsers will not start a session on it.'),
-        el('li', {}, el('b', {}, 'The Android app trusts public CAs only. '), 'A certificate from your own CA works in browsers once you install that CA, but the app will refuse it. Its own Servers screen has the same harder-privacy switch for the phone side.'),
+        el('li', {}, el('b', {}, 'The Android app trusts public CAs only. '), 'A certificate from your own CA works in browsers once you install that CA, but the app will refuse it. Its own Servers screen has the same tighter-privacy switch for the phone side.'),
         el('li', {}, el('b', {}, 'You can lock yourself out of this page’s https address. '), `http://${data.lan.ip || '<this machine>'}:${location.port || 8099}/setup on your home network always stays open to undo it.`),
         el('li', {}, el('b', {}, 'Your video stays end-to-end encrypted either way. '), 'This changes who you depend on to connect, not whether anyone can watch.')),
       el('label', { class: 'priv-check priv-ack', for: 'priv-ack' }, ack,
@@ -1383,7 +1383,7 @@ function privTlsSummary(t) {
     t.error ? el('p', { class: 'join-msg is-bad' }, t.error) : null);
 }
 
-/* The steps, when harder privacy is what is running. */
+/* The steps, when tighter privacy is what is running. */
 
 function privAddress(data) {
   const p = data.privacy || {};
@@ -1521,7 +1521,7 @@ function privStepWatch(data, ready) {
         ? 'Open the address at the top of this page on the device you watch from.'
         : 'Open this server through the https address your proxy or network provides.'),
       el('div', { class: 'step-do' }, el('ol', {},
-        el('li', {}, 'On the camera phone: open Tawny, choose The Monitor. With the app’s own harder privacy on, give it the same rendezvous, STUN and TURN as here.'),
+        el('li', {}, 'On the camera phone: open Tawny, choose The Monitor. With the app’s own tighter privacy on, give it the same rendezvous, STUN and TURN as here.'),
         el('li', {}, 'On the viewing device: open the address, choose Viewer, and scan the phone’s code.')))
     ]
   };
@@ -1533,7 +1533,7 @@ function privacyDefs(data) {
   defs.push(privStepWatch(data, ready));
   if (data.privacy.broken) {
     defs.unshift({
-      state: 'bad', title: 'Harder privacy settings', tag: 'could not be used',
+      state: 'bad', title: 'Tighter privacy settings', tag: 'could not be used',
       body: [el('p', { class: 'step-say' }, 'The saved settings could not be read or have errors, so everything networked is off: no Tailscale, no relay, no STUN. Nothing fell back to the normal setup. Fix them in the panel below and restart.'),
         ...latestSteps(data.startup).filter((s) => s.step === 'privacy' && !s.ok).map((s) => el('p', { class: 'join-msg is-bad' }, s.detail))]
     });
@@ -1560,17 +1560,17 @@ function renderPrivacyVerdict(data, defs) {
     finishUrl = privAddress(data);
     setupComplete = !!finishUrl;
     set('ok', ICONS.tick, 'Ready, on your own infrastructure',
-      'Harder privacy is on. Everything you chose is running, with no fallbacks. Whether a viewer outside can reach this network is up to your own setup.');
+      'Tighter privacy is on. Everything you chose is running, with no fallbacks. Whether a viewer outside can reach this network is up to your own setup.');
     if (finishUrl) extra.append(openLink(finishUrl));
     return;
   }
   setupComplete = false;
   if (failed) {
     set('bad', ICONS.cross, 'Something you chose is not working',
-      'Harder privacy is on, so nothing takes over for it. The step marked below says what failed.');
+      'Tighter privacy is on, so nothing takes over for it. The step marked below says what failed.');
     return;
   }
-  set('warn', ICONS.bang, 'Harder privacy is on — not finished yet',
+  set('warn', ICONS.bang, 'Tighter privacy is on — not finished yet',
     'Follow the open step below. Everything else is exactly what you chose.');
 }
 

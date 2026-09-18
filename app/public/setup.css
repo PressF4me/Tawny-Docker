@@ -402,7 +402,7 @@
 .setup-foot { display: flex; flex-direction: column; gap: 11px; margin-top: 4px; }
 .setup-foot .fine a { color: var(--accent-ink); }
 
-/* ------------------------------------------------------- harder privacy */
+/* ------------------------------------------------------- tighter privacy */
 
 /* Its own panel under the steps, not another step: it is a change of mode,
    and it is there whether or not the rest of the setup is finished. */

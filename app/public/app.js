@@ -1766,14 +1766,14 @@ function fallBackToDefault(entry, why) {
 }
 
 /**
- * Harder privacy, and the user's relay is not answering. There is no fallback
+ * Tighter privacy, and the user's relay is not answering. There is no fallback
  * by design — the user turned every one of them off — so the only honest thing
  * left is to say it, once per socket, and keep redialling the relay they chose.
  */
 function strictRelayDown(entry, why) {
   if (entry.strictNoted) return;
   entry.strictNoted = true;
-  diag(`own relay unusable (${why}) — harder privacy is on, NOT falling back`);
+  diag(`own relay unusable (${why}) — tighter privacy is on, NOT falling back`);
   toast(TawnyT.t('w_toast_strict_no_answer'));
 }
 
@@ -2094,7 +2094,7 @@ function openSignal(base, tag) {
       if (canFallBack()) {
         entry.helloTimer = setTimeout(() => fallBackToDefault(entry, 'no welcome'), RELAY_HELLO_MS);
       } else if (tag === 'cloud' && S.cfg.strict) {
-        // Harder privacy: the same check, and nothing to swap to. Say so once
+        // Tighter privacy: the same check, and nothing to swap to. Say so once
         // instead of hanging on a socket that will never admit anyone.
         entry.helloTimer = setTimeout(() => strictRelayDown(entry, 'no welcome'), RELAY_HELLO_MS);
       }
@@ -2354,7 +2354,7 @@ async function fetchIce() {
   // needs a relay (both peers behind carrier NAT) with nowhere to go.
   const rv = rendezvousBase() || S.cfg.rendezvous;
   if (!rv) { S.ice = []; return; }
-  // Harder privacy can forbid asking the rendezvous for TURN at all; the STUN
+  // Tighter privacy can forbid asking the rendezvous for TURN at all; the STUN
   // and TURN the user typed are then the whole list (see iceServers()).
   if (S.cfg.turnFetch === false) { S.ice = []; return; }
   const httpBase = rv.replace(/^ws/i, 'http').replace(/\/+$/, '');
@@ -2843,7 +2843,7 @@ function iceServers() {
   const mine = Array.isArray(S.cfg.turn) ? S.cfg.turn : [];
   const all = (S.ice && S.ice.length) ? [...mine, ...S.ice]
     : [...mine, ...(S.cfg.stun || []).map((urls) => ({ urls }))];
-  // "Never" under harder privacy: whatever a server hands out, no relay.
+  // "Never" under tighter privacy: whatever a server hands out, no relay.
   if (S.cfg.turnMode === 'never') return all.filter((e) => !isTurnEntry(e));
   return all;
 }
@@ -4786,7 +4786,7 @@ window.tawnyStart = function (role, key, name, signalUrl, rendezvousUrl, token, 
   const srv = opts && opts.servers;
   if (srv && typeof srv === 'object') {
     if (typeof srv.fallback === 'string' && srv.fallback) S.cfg.rendezvousFallback = srv.fallback;
-    // Harder privacy: no fallback is sent at all, STUN may be an empty list
+    // Tighter privacy: no fallback is sent at all, STUN may be an empty list
     // that means "none" (not "the build's"), and the TURN policy is the
     // user's. Kept under `shell*` names for the same reason as stunCustom:
     // init() rebuilds S.cfg from config.json after this runs.
@@ -4869,7 +4869,7 @@ window.tawnyPairCode = function (code, expMs) {
     const r = await fetch('config.json');
     if (r.ok) {
       const j = await r.json();
-      // Harder privacy comes from either end: the native shell's Servers
+      // Tighter privacy comes from either end: the native shell's Servers
       // screen (already on S.cfg), or a server that says so in config.json
       // (the container's /setup). Either way the page trusts no default.
       const strict = !!S.cfg.strict || j.strict === true;

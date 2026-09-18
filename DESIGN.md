@@ -4,7 +4,7 @@ The single source of truth for what this deployment is and why. If a comment in
 the code disagrees with this file, the comment is right — fix this file.
 
 There is **one topology** by default, and it runs over Tailscale. (The one
-exception is opt-in: "harder privacy" at `/setup`, which hands every networking
+exception is opt-in: "tighter privacy" at `/setup`, which hands every networking
 choice to the operator, with no fallbacks. See the last section.) There is no self-signed
 certificate, no certificate authority, nothing for anyone to import, and no
 hosted service of any kind — no Cloudflare, no signup, no API token. You paste
@@ -259,7 +259,7 @@ and Tawny declined to advertise the single route the remote path depends on.
 
 ---
 
-## Harder privacy — the operator's own infrastructure
+## Tighter privacy — the operator's own infrastructure
 
 Opt-in from `/setup`, off by default, and the only way anything in this file
 stops being true. It exists for somebody whose reason for self-hosting is that

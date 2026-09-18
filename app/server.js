@@ -64,7 +64,7 @@ const TRUST_PROXY = process.env.TRUST_PROXY !== 'off';
 const RENDEZVOUS_URL = process.env.RENDEZVOUS_URL || '';
 const TURN_MODE = process.env.TURN_MODE || 'auto';
 
-// ------------------------------------------------------- harder privacy
+// ------------------------------------------------------- tighter privacy
 //
 // Set by docker/entrypoint.sh from /data/privacy.json (docker/privacy.js) when
 // the operator switched it on at /setup. Everything below that reads the
@@ -377,7 +377,7 @@ async function turnCreds(req) {
     // Both transports: UDP is what actually relays media, TCP is the fallback
     // for a network that blocks UDP outright (some corporate wifi, some hotels).
     urls = [`turn:${h}:${TURN_PORT}`, `turn:${h}:${TURN_PORT}?transport=tcp`];
-    // TURN over TLS, when harder privacy gave coturn the operator's
+    // TURN over TLS, when tighter privacy gave coturn the operator's
     // certificate. Named by the certificate's host, not an IP, or the TLS
     // handshake would fail on name mismatch.
     if (TURN_TLS_PORT) urls.push(`turns:${h}:${TURN_TLS_PORT}?transport=tcp`);
@@ -857,7 +857,7 @@ async function joinTailnet(key) {
     `--socket=${TAWNY_TS_SOCKET}`, 'up',
     `--authkey=${key}`,
     `--hostname=${process.env.TAWNY_TS_HOSTNAME || 'tawny'}`,
-    // A self-hosted control server (Headscale) chosen under harder privacy.
+    // A self-hosted control server (Headscale) chosen under tighter privacy.
     ...(TS_LOGIN_SERVER ? [`--login-server=${TS_LOGIN_SERVER}`] : []),
     // --timeout so a control-plane stall returns a classifiable error instead
     // of blocking until our execFile SIGTERM (whose message leaks the argv).
@@ -1097,7 +1097,7 @@ function setupReady(s) {
   return true;
 }
 
-// ------------------------------------------------------- harder privacy
+// ------------------------------------------------------- tighter privacy
 
 let rootCerts = null;
 /** Mozilla's roots as bundled with Node — what "publicly trusted" means here. */
@@ -1191,7 +1191,7 @@ function privacyApplied(saved) {
 
 /**
  * The form's starting point the first time someone opens the panel: what this
- * container is running now, minus the defaults harder privacy exists to drop —
+ * container is running now, minus the defaults tighter privacy exists to drop —
  * no public STUN, no Tailscale log upload.
  */
 function privacyStartingPoint() {
@@ -1296,7 +1296,7 @@ const handler = async (req, res) => {
       // The page's own policy has no "never"; it gets auto plus no TURN at all.
       turnMode: TURN_MODE,
       rendezvous, authRequired: false,
-      // Harder privacy: the page must not substitute a default for anything
+      // Tighter privacy: the page must not substitute a default for anything
       // listed here — an empty STUN list means none.
       ...(PRIVACY_ON ? { strict: true, turnFetch: TURN_MODE !== 'never' } : {})
     });
@@ -1432,7 +1432,7 @@ const handler = async (req, res) => {
     setupCache = { at: 0, value: null };
     return json(res, ok ? 200 : 502, { ok });
   }
-  // Harder privacy: save the operator's own networking. Refused from outside
+  // Tighter privacy: save the operator's own networking. Refused from outside
   // the operator's network like every other /setup action, and — the first
   // time it is switched on — refused without the acknowledgement the page asks
   // for, so no script or stray click turns the fallbacks off unread.
@@ -1723,7 +1723,7 @@ const onUpgrade = (req, socket, head) => {
 
   const lan = LAN_BRIDGE_RE.exec(url.pathname);
   if (lan) {
-    // Switched off under harder privacy: this server then never dials anything.
+    // Switched off under tighter privacy: this server then never dials anything.
     if (!LAN_BRIDGE) return deny(404, 'Not Found');
     if (!hostAllowed(req)) return deny(421, 'Misdirected Request');
     if (!originAllowed(req)) { noteFail(ip); return deny(403, 'Forbidden'); }
@@ -1934,7 +1934,7 @@ const httpServer = http.createServer(handler);
 httpServer.on('upgrade', onUpgrade);
 servers.push({ s: httpServer, port: PORT, scheme: 'http' });
 
-// Harder privacy with "my own certificate": a second listener, TLS terminated
+// Tighter privacy with "my own certificate": a second listener, TLS terminated
 // here, with the operator's files. The plain one stays for /setup on the LAN.
 // A certificate that cannot be loaded does not stop the container — /setup has
 // to stay up to say why — and it does not fall back to anything either: there
@@ -1970,13 +1970,13 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
 }
 
 function logSummary() {
-  if (PRIVACY_ON) log(`harder privacy: ON${PRIVACY_BROKEN ? ' (settings unreadable — everything networked is off)' : ''} — no fallbacks`);
+  if (PRIVACY_ON) log(`tighter privacy: ON${PRIVACY_BROKEN ? ' (settings unreadable — everything networked is off)' : ''} — no fallbacks`);
   log(`allowed hosts: ${ALLOWED_HOSTS.length ? ALLOWED_HOSTS.join(', ') : 'any (set ALLOWED_HOSTS to pin)'}`);
   log(`stun: ${STUN.length ? STUN.join(', ') : 'none (LAN / tailnet only)'}`);
   log(`rendezvous: ${RENDEZVOUS_URL || 'derived from each request Host header'}`);
   log(LAN_BRIDGE ? `lan bridge: /lan/<private-ipv4>/<port>/ws -> the app's own relay` : 'lan bridge: off');
   log(`turn: ${
-    TURN_MODE === 'never' ? 'never (harder privacy)'
+    TURN_MODE === 'never' ? 'never (tighter privacy)'
       : TURN_URLS.length ? `${TURN_URLS.join(', ')}${TURN_SECRET ? '' : ' (NO SECRET — /turn will 404)'}`
       : TURN_EMBEDDED && TURN_SECRET ? `embedded coturn on :${TURN_PORT}${TURN_TLS_PORT ? ` (+TLS :${TURN_TLS_PORT})` : ''}, host from each request${PUBLIC_HOST ? ` (pinned to ${PUBLIC_HOST})` : ''}`
       : 'none — peer-to-peer only'

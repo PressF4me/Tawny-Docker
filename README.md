@@ -196,12 +196,12 @@ outside. Tailscale is how this is meant to run; LAN-only is a fallback.
 
 ---
 
-## For harder privacy [advanced]
+## For tighter privacy [advanced]
 
 Everything above leans on Tailscale: its coordination server, its `ts.net`
 certificate, and public STUN from Google and Cloudflare, with fallbacks that keep
 a session alive when something is misconfigured. If you want none of that, open
-`/setup`, scroll to **For harder privacy [advanced]** and turn it on. It asks
+`/setup`, scroll to **For tighter privacy [advanced]** and turn it on. It asks
 you to acknowledge the risks first, then lets you set every piece yourself:
 
 | | Choices |

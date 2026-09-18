@@ -1,4 +1,4 @@
-// Harder privacy — the operator's own networking, every inch of it, set from
+// Tighter privacy — the operator's own networking, every inch of it, set from
 // /setup and kept in the data volume.
 //
 // The normal container is built to be forgiving: public STUN when nothing else
