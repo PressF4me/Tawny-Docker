@@ -875,6 +875,25 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .sas--gate .sas-code { font-size: 40px; }
 .sas--gate .sas-actions, .sas--gate p { width: min(88vw, 360px); }
 
+/* The takeover sits on the page's own ground, so it takes the page's ink too.
+   It used to keep the over-video glass palette - near-white text on cream in
+   light mode, which left "Disconnect" invisible until hovered and the note and
+   code washed out. */
+.sas--gate { color: var(--fg); }
+.sas--gate p { color: var(--dim); }
+.sas--gate .sas-code { color: var(--sky-d); }
+.sas--gate.sas--warn .sas-code { color: var(--live-ink); }
+.sas--gate .wide.ghost {
+  background: none;
+  border-color: color-mix(in srgb, var(--fg) 28%, transparent);
+  color: var(--fg);
+}
+.sas--gate .wide.ghost:hover { border-color: var(--live-ink); color: var(--live-ink); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .sas--gate .sas-code { color: var(--sky-lit); }
+}
+:root[data-theme="dark"] .sas--gate .sas-code { color: var(--sky-lit); }
+
 .dot {
   width: 8px; height: 8px;
   border-radius: 50%;

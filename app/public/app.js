@@ -641,6 +641,9 @@ function deleteChannel(ch) {
   // Handhelds rather than remembering them past the delete.
   try {
     localStorage.removeItem(`tawny.sasok.${ch.id}`);
+    for (const k of Object.keys(localStorage)) {
+      if (k.startsWith(`tawny.sasok.${ch.id}.`)) localStorage.removeItem(k);
+    }
     localStorage.removeItem(`tawny.sas.${ch.id}`);
     localStorage.removeItem(`tawny.bond.${ch.id}`);
     localStorage.removeItem(`tawny.paired.${ch.id}`);
@@ -1918,34 +1921,38 @@ async function showSas(peer, attempt = 0, since = Date.now()) {
   showViewerSas(code);
 }
 
-/** Monitor: cloud Handhelds whose code has not been confirmed yet, oldest
- *  first. LAN Handhelds never appear here - the Monitor *is* their relay. Once
- *  the user has vouched for this channel's code a first time, nothing is
- *  pending: the review, like the Handheld's, happens once per monitor. */
+/** Monitor: Handhelds whose code has not been confirmed yet, oldest first.
+ *
+ *  Once per Handheld *device*, not once per channel, and over any path. It
+ *  used to be both of the other things: vouching for one phone's code marked
+ *  the whole channel reviewed, and LAN Handhelds were skipped because the
+ *  Monitor is their relay. But the Handheld keeps its own review flag and
+ *  shows its card whatever the path, so a second phone - or any phone on the
+ *  Wi-Fi - got a code on its screen that the Monitor never showed to compare
+ *  against. Both ends now ask under the same rule: the first time this
+ *  particular Handheld connects. */
 function sasPendingViewers() {
-  if (sasReviewed()) return [];
   return viewerPeers().filter(
-    (p) => p.transport?.tag === 'cloud' && p.sas && !p.sasOk
+    (p) => p.sas && !p.sasOk && !viewerSasReviewed(p)
   );
 }
 
 /**
  * Monitor: cloud Handhelds whose safety code could not be computed at all.
  *
- * Gated on sasReviewed(), same as sasPendingViewers() — this used to fire on
- * every affected call even on a channel already vouched for, on the theory
- * that "I compared the codes once" shouldn't silence "a code could not be
- * derived at all". In practice a code fails to compute on perfectly ordinary
- * reconnects (a network blip mid-handshake, getStats() not ready yet), so an
- * already-trusted Monitor kept re-alarming over its own live video for
- * connectivity hiccups, not attacks. Still logged to the flight recorder
- * either way (see showSas) — just not interrupted over for a channel the
- * user already vouched for.
+ * Gated on viewerSasReviewed(), same as sasPendingViewers() — this used to
+ * fire on every affected call even for a phone already vouched for, on the
+ * theory that "I compared the codes once" shouldn't silence "a code could not
+ * be derived at all". In practice a code fails to compute on perfectly
+ * ordinary reconnects (a network blip mid-handshake, getStats() not ready
+ * yet), so an already-trusted Monitor kept re-alarming over its own live video
+ * for connectivity hiccups, not attacks. Still logged to the flight recorder
+ * either way (see showSas) — just not interrupted over for a phone the user
+ * already vouched for.
  */
 function sasFailedViewers() {
-  if (sasReviewed()) return [];
   return viewerPeers().filter(
-    (p) => p.transport?.tag === 'cloud' && p.sasFailed && !p.sasOk
+    (p) => p.sasFailed && !p.sasOk && !viewerSasReviewed(p)
   );
 }
 
@@ -1957,9 +1964,9 @@ function sasFailedViewers() {
  * What remains is the card: it asks about one phone at a time, pinned to that
  * peer until the user answers or the phone goes away, and says how many are
  * queued behind it. Re-picking the newest peer on every call would swap the
- * digits out from under someone halfway through reading them. And once the user
- * has vouched for this channel's code once (sasReviewed), sasPendingViewers()
- * is empty and the card stays down for good.
+ * digits out from under someone halfway through reading them. Once the user
+ * has vouched for a phone's code (viewerSasReviewed), that phone is not asked
+ * about again; a phone this Monitor has never compared codes with still is.
  */
 function syncStationSas() {
   if (S.role !== 'station') return;
@@ -1976,7 +1983,7 @@ function syncStationSas() {
   // is still a live cloud peer that wants an answer.
   let ask = S.sasAsk ? S.peers.get(S.sasAsk) : null;
   const wanted = (p) =>
-    p && !p.sasOk && p.transport?.tag === 'cloud' && !sasReviewed() && (p.sasFailed || p.sas);
+    p && !p.sasOk && !viewerSasReviewed(p) && (p.sasFailed || p.sas);
   if (!wanted(ask)) ask = failed[0] || pending[0] || null;
   S.sasAsk = ask ? ask.id : null;
 
@@ -2029,6 +2036,19 @@ function sasReviewed() {
 }
 function markSasReviewed(code) {
   try { localStorage.setItem(sasReviewKey(), code || '1'); } catch {}
+}
+
+// Monitor: the same, per Handheld. Keyed by the bond id (`pid`) the Handheld
+// sends with every offer, which is stable across its reconnects. A peer that
+// sent none is a device this Monitor cannot recognise, so it is always asked.
+const viewerSasKey = (p) => `tawny.sasok.${S.channel?.id}.${p.pid}`;
+function viewerSasReviewed(p) {
+  if (!p.pid) return false;
+  try { return !!localStorage.getItem(viewerSasKey(p)); } catch { return false; }
+}
+function markViewerSasReviewed(p) {
+  if (!p.pid || !p.sas) return;
+  try { localStorage.setItem(viewerSasKey(p), p.sas); } catch {}
 }
 
 function showViewerSas(code) {
@@ -2223,12 +2243,19 @@ function openSignal(base, tag) {
           // This used to arrive as 4008 and be read out as "expired", which
           // sent people back to the same QR over and over.
           : ev.code === 4010 ? TawnyT.t('w_bail_monitor_offline')
+          // 4008 with no ticket in our hello: a code-only link (a Monitor on
+          // tighter privacy with no relay hands out `c` and no `t`) arriving
+          // at a relay that admits Viewers only by ticket. Nothing is expired
+          // - this server just cannot let a code-only phone in, and "expired"
+          // sent people back to rescan a code that was fine.
+          : ev.code === 4008 && S.role === 'viewer' && !S.token ? TawnyT.t('w_bail_code_only')
           // 4008 is the relay's own refusal — a ticket that no longer matches
           // the room. Different cause from the Monitor's pairing gate, same
           // thing to do about it, so it gets the same sentence and the same
           // screen in the native shell.
           : EXPIRED_MESSAGE,
           ev.code === 4003 ? 'full'
+            : ev.code === 4008 && S.role === 'viewer' && !S.token ? 'noticket'
             : ev.code === 4008 ? 'expired'
             : ev.code === 4010 ? 'offline' : undefined
         );
@@ -2676,7 +2703,19 @@ async function handle(m, entry) {
         const clean = m.label.replace(/[^\x20-\x7E]+/g, '').trim().slice(0, 20);
         if (clean) p.label = clean;
       }
+      // Which Handheld this is, for its once-per-device safety-code review.
+      if (S.role === 'station' && typeof m.pid === 'string' && HEX32.test(m.pid)) p.pid = m.pid;
       await answerPeer(p, m.sdp);
+      // A browser Monitor still on "Waiting for the Viewer": the Viewer is
+      // here, so move on to the live view, as "Start watching now" does. It
+      // used to stay put - still saying it was waiting - while the safety
+      // code card it owed this phone sat on the hidden live screen, so the
+      // Viewer showed a code and the Monitor showed none.
+      if (S.role === 'station' && !el.watchPair.hidden) {
+        clearInterval(wpTicker);
+        wpTicker = null;
+        show(el.live);
+      }
       break;
     }
     case 'answer': {
@@ -4529,7 +4568,7 @@ el.dimmer.addEventListener('click', () => setDim(false));
 $('#sas-ok')?.addEventListener('click', () => {
   if (S.role === 'station') {
     const p = S.sasAsk ? S.peers.get(S.sasAsk) : null;
-    if (p) { p.sasOk = true; if (p.sas) markSasReviewed(p.sas); }
+    if (p) { p.sasOk = true; markViewerSasReviewed(p); }
     S.sasAsk = null;
     syncStationSas();       // card goes away; the code no longer sits in the rail
     return;
