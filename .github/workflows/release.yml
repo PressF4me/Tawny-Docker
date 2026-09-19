@@ -5,9 +5,12 @@ name: release
 #   - manual run           → publishes :edge from the chosen ref
 #
 # Auth is the built-in GITHUB_TOKEN (no PAT). Because this workflow lives in
-# pressf4me/tawny and the Dockerfile carries
-# org.opencontainers.image.source=…/pressf4me/tawny, the package publishes
+# pressf4me/Tawny-Docker and the Dockerfile carries
+# org.opencontainers.image.source=…/pressf4me/Tawny-Docker, the package publishes
 # connected to this repo — not orphaned.
+#
+# The image name is fixed, not taken from the repo name: the repo was renamed
+# from `tawny` to `Tawny-Docker`, and every install pulls ghcr.io/pressf4me/tawny.
 
 on:
   push:
@@ -24,7 +27,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/${{ github.repository }}
+  IMAGE: ghcr.io/pressf4me/tawny
 
 jobs:
   build:
