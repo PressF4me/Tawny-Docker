@@ -528,6 +528,27 @@ function diag(line) {
   tellNative('diag', { line: s });
 }
 
+// Which road a connection took: `lan` (both on the same network), `direct`
+// (over the internet, phone to phone) or `turn` (through the paid relay). Only
+// candidate types go in the log, never addresses. It is what tells how many
+// sessions would be lost if TURN were paused (see turnbudget.js in the Worker).
+async function logPath(pc) {
+  try {
+    const stats = await pc.getStats();
+    let pair = null;
+    stats.forEach((r) => {
+      if (r.type === 'transport' && r.selectedCandidatePairId) pair = stats.get(r.selectedCandidatePairId);
+    });
+    if (!pair) stats.forEach((r) => { if (r.type === 'candidate-pair' && r.nominated && r.state === 'succeeded') pair = r; });
+    if (!pair) return;
+    const lc = stats.get(pair.localCandidateId) || {};
+    const rc = stats.get(pair.remoteCandidateId) || {};
+    const path = lc.candidateType === 'relay' || rc.candidateType === 'relay' ? 'turn'
+      : lc.candidateType === 'host' && rc.candidateType === 'host' ? 'lan' : 'direct';
+    diag(`path=${path} (local ${lc.candidateType || '?'}/${lc.protocol || '?'}, remote ${rc.candidateType || '?'})`);
+  } catch {}
+}
+
 // A script error that reaches the top is a bug we want in the flight recorder,
 // not just the console the phone cannot show. WebView reports the line as 1 for
 // anything reached through evaluateJavascript, so lean on the stack instead.
@@ -2987,6 +3008,7 @@ function newPC(peer) {
       clearTimeout(peer.iceKick);
       clearTimeout(peer.connectDeadline);
       peer.connectDeadline = null;
+      logPath(pc);
     } else if (st === 'failed') reconnectPeer(peer);
     updateStatus();
     updatePeerChip();
