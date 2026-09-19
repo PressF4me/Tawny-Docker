@@ -13,12 +13,14 @@
 // Secrets (wrangler secret put ...):
 //   TURN_KEY_ID / TURN_API_TOKEN   Cloudflare Realtime TURN (preferred), OR
 //   TURN_STATIC_SECRET / TURN_URLS coturn REST (self-hosted fallback)
+//   ANALYTICS_TOKEN                "Account Analytics: Read" only, for the TURN cap
 // Vars (wrangler.toml [vars]):
-//   STUN_URLS, TURN_MODE, ALLOWED_ORIGINS
+//   STUN_URLS, TURN_MODE, ALLOWED_ORIGINS, ACCOUNT_ID, TURN_CAP_GB (see turnbudget.js)
 
 export { Room } from './room.js';
 import { privacyResponse } from './privacy.js';
 import { postReport, pullReports } from './reports.js';
+import { turnPaused } from './turnbudget.js';
 
 const ROOM_RE = /^[a-f0-9]{32}$/;
 const TICKET_RE = /^[A-Za-z0-9_-]{8,64}$/;
@@ -156,6 +158,11 @@ export default {
       const stub = env.ROOM.get(env.ROOM.idFromName(room));
       const vr = await stub.fetch(`https://do/verify?t=${encodeURIComponent(ticket)}`);
       if (vr.status !== 200) return json({ error: 'not paired' }, 403, cors());
+
+      // Past the month's cap no new credentials: phones connect directly or not
+      // at all until the 1st, and the card on the account is never charged.
+      const budget = await turnPaused(env);
+      if (budget.paused) return json({ error: 'turn paused for this month' }, 503, cors());
 
       const creds = await turnCreds(env);
       if (!creds) return json({ error: 'no turn configured' }, 404, cors());
