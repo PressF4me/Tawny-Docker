@@ -59,6 +59,9 @@ export async function postReport(request, env, ctx) {
     id: clip(body.id, 32) || HEX(6),     // client-side report id (dedupe aid)
     log,
   };
+  // Sent only by Google Play's pre-launch test phones (Firebase Test Lab), never
+  // by a user's, so a robot's reports can be kept apart from real ones.
+  if (body.lab === true) rec.lab = true;
   // Deliberately no IP and no country: the privacy policy enumerates exactly
   // what a report holds (log + model + Android + app version), and that is all
   // this stores. Keep it that way.
@@ -81,7 +84,7 @@ function notify(env, ctx, rec) {
 
   const first = rec.log.split('\n').find((l) => l.trim()) || '(empty log)';
   const text =
-    `Tawny report ${rec.id} — v${rec.v} (${rec.c}) · ${rec.model} · ` +
+    `Tawny report ${rec.id}${rec.lab ? ' [test lab]' : ''} — v${rec.v} (${rec.c}) · ${rec.model} · ` +
     `Android ${rec.android}\n${first.slice(0, 200)}`;
 
   const isNtfy = /(^|\.)ntfy\.sh$/i.test(host);
