@@ -116,6 +116,11 @@ const FULL_MESSAGE =
 // afterwards, for as long as the channel exists.
 const PAIR_TTL_MS = 10 * 60 * 1000;
 
+// How far apart two devices' clocks may be before a Viewer trusts its own to
+// call a Monitor's pairing code expired. A wrong timezone on a clock kept in
+// local time is at most ~14 hours off; a day covers it with room to spare.
+const CLOCK_SKEW_MS = 24 * 60 * 60 * 1000;
+
 // The one sentence a phone sees when it arrives with a code that has run out,
 // wherever the refusal came from — its own pre-flight check on the scanned
 // link, or the Monitor turning it away over LAN or the internet relay.
@@ -1356,8 +1361,15 @@ function adopt(raw) {
   // where the user is looking, in a sentence that tells them what to do —
   // rather than dialling out and failing at the far end. The Monitor checks it
   // again for real; this is only the fast, kind path.
+  //
+  // It is judged on *this* device's clock against a deadline the Monitor's
+  // clock wrote, so only when it is stale past any plausible disagreement
+  // between the two. A Viewer whose clock ran two hours fast (a Windows VM
+  // reading a local-time RTC in the wrong timezone) called every fresh code
+  // expired and never dialled. Anything closer goes to the Monitor, which
+  // refuses a lapsed code itself and gets the same sentence back here.
   const exp = Number(p.get('e'));
-  if (Number.isFinite(exp) && exp > 0 && Date.now() > exp * 1000) {
+  if (Number.isFinite(exp) && exp > 0 && Date.now() > exp * 1000 + CLOCK_SKEW_MS) {
     lastPairError = EXPIRED_MESSAGE;
     return false;
   }
