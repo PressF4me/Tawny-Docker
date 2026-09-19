@@ -19,7 +19,7 @@
 //   deno/main.ts     (Deno Deploy alternative)
 //   ../server.js     (self-host reference)
 
-export const PRIVACY_UPDATED = '2026-09-18';
+export const PRIVACY_UPDATED = '2026-09-19';
 
 export const PRIVACY_HEADERS = {
   'content-type': 'text/html; charset=utf-8',
@@ -261,7 +261,7 @@ export const PRIVACY_HTML = `<!doctype html>
 
   <h2>Contact</h2>
   <p>Questions or a data-deletion request:
-  <a href="mailto:tawnyapp.radar137@passinbox.com">tawnyapp.radar137@passinbox.com</a></p>
+  <a href="mailto:tawnysupport@pm.me">tawnysupport@pm.me</a></p>
   <p>There is generally nothing for us to delete, because we do not collect or
   store your personal data. Clearing the app's data (Android Settings &rarr; Apps
   &rarr; Tawny &rarr; Storage) removes the pairing key and all local state from
