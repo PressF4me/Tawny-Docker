@@ -54,6 +54,9 @@ TURN_URLS = ""
 # --- secrets (do NOT put these here; use `wrangler secret put NAME`) ----------
 # Read key for GET /report/pull — a long random string:
 #   wrangler secret put REPORT_KEY
+# Optional second key that can read /report/pull but never drain it — give this
+# one, not REPORT_KEY, to an assistant that triages reports:
+#   wrangler secret put REPORT_READ_KEY
 # Optional push when a report lands — an ntfy.sh topic URL or a Discord/Slack
 # webhook. Best-effort; unset = reports are just stored and pulled on demand:
 #   wrangler secret put REPORT_NOTIFY_URL

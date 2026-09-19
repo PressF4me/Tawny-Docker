@@ -2,6 +2,7 @@
 //
 //   POST /report            store one report (from the app's "Send to Tawny")
 //   GET  /report/pull?key=  read them back (protected); &drain=1 deletes them
+//                           (REPORT_KEY only — REPORT_READ_KEY can read, never delete)
 //
 // Reports are the flight-recorder log from the in-app diagnostics hatch plus a
 // few device facts (app version, device model, Android release, coarse country
@@ -12,6 +13,9 @@
 // Set up:
 //   wrangler kv namespace create REPORTS        # paste id into wrangler.toml
 //   wrangler secret put REPORT_KEY              # long random string, for /pull
+//   wrangler secret put REPORT_READ_KEY         # optional: a second key that can
+//                                               #   read but not drain — for an
+//                                               #   assistant that triages them
 //   wrangler secret put REPORT_NOTIFY_URL       # optional: ntfy.sh topic or a
 //                                               #   Discord/Slack webhook
 // With REPORTS unbound, POST /report just 404s and the app falls back to its
@@ -90,19 +94,30 @@ function notify(env, ctx, rec) {
   if (ctx && ctx.waitUntil) ctx.waitUntil(p);
 }
 
+// Constant-time-ish compare on a shared secret in the query string. It is a
+// read key for low-value data, not a credential that protects anything.
+function sameKey(given, key) {
+  if (!key || given.length !== key.length) return false;
+  let diff = 0;
+  for (let i = 0; i < given.length; i++) diff |= given.charCodeAt(i) ^ key.charCodeAt(i);
+  return diff === 0;
+}
+
 export async function pullReports(request, env, url) {
   if (!env.REPORTS) return j({ error: 'reports not configured' }, 404);
   if (!env.REPORT_KEY) return j({ error: 'no report key set' }, 500);
 
-  // Constant-time-ish compare on a shared secret in the query string. It is a
-  // read key for low-value data, not a credential that protects anything.
+  // Two keys. REPORT_KEY is the owner's: it reads and may drain. REPORT_READ_KEY,
+  // when set, is for anything that only needs to look — it reads, and a drain
+  // with it is refused, so handing it to an automated triager cannot lose a
+  // report. Reports expire on their own after 30 days either way.
   const given = url.searchParams.get('key') || '';
-  if (given.length !== env.REPORT_KEY.length) return j({ error: 'forbidden' }, 403);
-  let diff = 0;
-  for (let i = 0; i < given.length; i++) diff |= given.charCodeAt(i) ^ env.REPORT_KEY.charCodeAt(i);
-  if (diff !== 0) return j({ error: 'forbidden' }, 403);
+  const owner = sameKey(given, env.REPORT_KEY);
+  const reader = !owner && !!env.REPORT_READ_KEY && sameKey(given, env.REPORT_READ_KEY);
+  if (!owner && !reader) return j({ error: 'forbidden' }, 403);
 
   const drain = url.searchParams.get('drain') === '1';
+  if (drain && !owner) return j({ error: 'read-only key cannot drain' }, 403);
   const out = [];
   let cursor;
   do {
