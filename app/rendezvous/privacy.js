@@ -129,7 +129,8 @@ export const PRIVACY_HTML = `<!doctype html>
       <td><strong>Diagnostics log</strong></td>
       <td>An optional, deliberately out-of-the-way log (long-press the small
         version number) for working out why a connection failed. Records hashed
-        room identifiers, never your key.</td>
+        room identifiers and connection events, never your key or IP
+        addresses.</td>
       <td>Only if you tap <strong>Send to Tawny</strong> &mdash; see
         &ldquo;Sending a diagnostics report&rdquo; below. Otherwise it stays on
         your device and is excluded from cloud backup.</td>
@@ -215,7 +216,8 @@ export const PRIVACY_HTML = `<!doctype html>
     <li>It is never sent automatically, only when you tap the button.</li>
     <li>It contains no account, name, email or advertising identifier &mdash;
       there are none in the app &mdash; and the log records only hashed room
-      identifiers, never your pairing key.</li>
+      identifiers and connection events (for example whether a connection was
+      direct or relayed), never your pairing key or IP addresses.</li>
     <li>Reports are held for at most 30 days and then deleted automatically.</li>
     <li>If you would rather not send it through the app, the same screen offers
       &ldquo;Send another way&rdquo; (your device's normal share sheet) and
@@ -258,6 +260,15 @@ export const PRIVACY_HTML = `<!doctype html>
   <h2>Changes</h2>
   <p>If this policy changes materially, the &ldquo;Last updated&rdquo; date
   above will change and the new version will ship with an app update.</p>
+
+  <h2>If you email us</h2>
+  <p>Mail to <a href="mailto:tawnysupport@pm.me">tawnysupport@pm.me</a> is
+  received by Proton Mail. To help answer it, a copy is kept on the developer's
+  own server for up to 30 days and read by an AI assistant that runs entirely on
+  the developer's own hardware. Your message is not sent to any outside AI or
+  analytics service. The assistant only drafts; every reply is written or
+  checked and sent by the developer. Don't include pairing codes or passwords in
+  an email.</p>
 
   <h2>Contact</h2>
   <p>Questions or a data-deletion request:
