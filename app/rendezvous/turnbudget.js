@@ -62,12 +62,14 @@ export async function turnPaused(env, { cache = globalThis.caches && caches.defa
     try {
       const u = await turnEgressThisMonth(env, fetchImpl);
       rec = { ...u, at: Date.now() };
+      console.log(`turn budget: ${(u.bytes / 1e9).toFixed(2)} GB of ${capGb} GB this month`);
       if (cache) {
         await cache.put(KEY, new Response(JSON.stringify(rec), {
           headers: { 'cache-control': `max-age=${STALE_S}` },
         }));
       }
     } catch (e) {
+      console.log(`turn budget: analytics unreadable (${e.message || e})`);
       // Keep deciding on the last good figure from this month; with none, fail open.
       if (!rec || rec.month !== month) return { paused: false, error: String(e.message || e) };
     }
