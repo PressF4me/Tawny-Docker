@@ -15,10 +15,12 @@ runtime — nothing is streamed and nothing is downloaded at use time.
 | `goodboy` | "Good boy" | `goodboy.ogg` | 0.8 s | `_src/goodboy - dog.mp3` |
 | `bell` | "Bell" | `bell.ogg` | 1.8 s | FM synthesis (no source file) |
 
-`_src/` holds the original recordings the first four are trimmed and normalised
-from. It is the master copy — edit those, or the trim windows in
-`tools/gen-chimes.sh`, and re-run that script to rebuild the whole set. `_src/`
-is excluded from the APK.
+The original recordings the first four are trimmed and normalised from are
+**not in this repository**: the Pixabay licence covers them inside the app, not
+as loose downloadable files, and `pspsps` is an internal recording. Keep them
+locally in `_src/` (git-ignored) or point `TAWNY_SOUNDS_SRC` at them. They are
+the master copy: edit those, or the trim windows in `tools/gen-chimes.sh`, and
+re-run that script to rebuild the whole set. `_src/` is excluded from the APK.
 
 ## Licensing — nothing here needs a credit line
 
@@ -51,7 +53,7 @@ For every shipped clip, and anything that replaces one:
   platform we ship to; Opus-in-Ogg is only guaranteed from Android API 29 and
   `minSdk` is 26
 
-Drop a raw recording into `_src/` (any format ffmpeg reads), point
+Drop a raw recording into `_src/` (any format ffmpeg reads; it stays out of git), point
 `tools/gen-chimes.sh` at it, re-run, then rebuild the debug APK so the mirror in
 `android/app/src/main/assets/web/sounds/` updates, and commit both copies.
 

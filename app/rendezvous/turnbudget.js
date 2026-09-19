@@ -12,7 +12,7 @@
 // most a few times an hour per location, not once per call. If analytics cannot
 // be read, the last good figure (kept for STALE_S) decides; with none at all it
 // fails open: a broken analytics token must not take TURN away from everyone.
-// The hermes-o limits checker alerts on the same numbers well before the cap.
+// A separate usage alert (outside this repository) warns well before the cap.
 //
 // Needs: ANALYTICS_TOKEN (secret, "Account Analytics: Read" only), ACCOUNT_ID
 // and TURN_CAP_GB (vars). Without ANALYTICS_TOKEN or TURN_CAP_GB there is no cap.

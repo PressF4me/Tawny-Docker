@@ -14,3 +14,6 @@ Bugs/
 
 # Local compose hardening — names this machine's tailnet and LAN addresses.
 docker-compose.override.yml
+
+# Original chime recordings: not redistributable as loose files (see app/public/sounds/README.md).
+app/public/sounds/_src/
