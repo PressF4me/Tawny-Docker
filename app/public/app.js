@@ -748,12 +748,20 @@ el.editorName.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveEd
 /**
  * `force` skips the remembered role — the "Switch role" row-menu action uses
  * it, so a household that repurposes a phone is not stuck asking Tawny to
- * forget first.
+ * forget first. When force is set and a role exists, switch directly to the
+ * opposite role instead of showing both cards.
  */
 function openRole(ch, force = false) {
   S.channel = ch;
-  const remembered = !force && roleFor(ch);
-  if (remembered) { start(remembered); return; }
+  const current = roleFor(ch);
+  if (!force && current) { start(current); return; }
+  // When switching roles and one already exists, jump directly to the opposite.
+  if (force && current) {
+    const opposite = current === 'station' ? 'viewer' : 'station';
+    setRoleFor(ch, opposite);
+    start(opposite);
+    return;
+  }
   el.roleName.textContent = ch.name;
   note(el.roleNote, '');
   show(el.role);
@@ -955,10 +963,14 @@ function chosenBase() {
  */
 function relayHint() {
   const b = rendezvousBase();
+  if (!b) return '';
   // `ws://` only ever means a LAN address the app cannot use from here; the
   // Servers screen wants the secure form, and wsBase() has already made the
   // scheme one of exactly ws:/wss:.
-  return b ? b.replace(/^wss?:/i, 'wss:').replace(/\/+$/, '') : '';
+  const addr = b.replace(/^wss?:/i, 'wss:').replace(/\/+$/, '');
+  // A stock Tawny app already points here; nothing to paste.
+  const DEFAULT_RENDEZVOUS = 'wss://tawny-rendezvous.tawny1.workers.dev';
+  return addr.toLowerCase() === DEFAULT_RENDEZVOUS ? '' : addr;
 }
 
 /** Fill a relay hint's address, or hide the whole disclosure when there is none. */
