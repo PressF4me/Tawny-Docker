@@ -1,10 +1,10 @@
 # Tawny — self-hosted pet monitor: the web client, its signalling relay, a TURN
 # fallback, and the Tailscale node that makes all of it reachable.
 #
-# The build context is this repo. The server payload (server.js, public/,
-# rendezvous/, docker/, package*.json) is vendored under app/ by tools/tawny-sync
-# from the Tawny Android checkout — that repo is the source of truth for it.
-# Every COPY path below is therefore app/… relative to this folder.
+# The build context is this repo, and every COPY path below is app/… relative
+# to this folder. server.js, docker/, rendezvous/ and package*.json live here;
+# only app/public/ — the web client, the same bundle the Android app ships — is
+# vendored, by tools/tawny-sync, from the Tawny Android checkout.
 FROM node:22-alpine
 
 # OCI metadata. org.opencontainers.image.source is what links the published

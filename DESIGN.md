@@ -104,6 +104,14 @@ So the phone contributes exactly what a stock phone on Wi-Fi contributes: a
 is what makes that first candidate reachable from outside the house. Nothing on
 the phone changes, ever.
 
+*Since then (app 1.0):* the reasoning above is about v0.3.1 and is kept as the
+record of why the topology looks like this. The app has moved on — it reads a
+web Monitor's `https://…/#…` QR and adopts that relay (Bug 04), it can use this
+container as its rendezvous over `wss://<node>.<tailnet>.ts.net`, a public
+Let's Encrypt name (Bug 05), and its CSP now names a `ws://` relay with its
+scheme. None of that is needed for the default setup, which still asks nothing
+of the phone.
+
 ### The `/lan` bridge
 
 `server.js` also carries a WebSocket bridge at
@@ -218,8 +226,9 @@ and Tawny declined to advertise the single route the remote path depends on.
 * **Hosted TURN of any kind.** Nobody creates an account with a media
   infrastructure company to watch their cat.
 * **A self-signed certificate or a CA to import.** Tailscale's Let's Encrypt
-  cert is the only TLS in the design. `server.js` runs a plain HTTP listener and
-  nothing else; `tailscale serve` terminates TLS in front of it.
+  cert is the only TLS in the default design. `server.js` runs a plain HTTP
+  listener and `tailscale serve` terminates TLS in front of it; only tighter
+  privacy, with the operator's own certificate files, adds a TLS listener.
 * **A public domain, DNS records, port forwarding.** The tailnet is the only
   network path in.
 * **Anything on the phone.** No Servers screen, no certificate, no app rebuild.
@@ -235,7 +244,8 @@ and Tawny declined to advertise the single route the remote path depends on.
 | Routing a pairing link's `h=` through the bridge | `app/public/app.js`, `adopt()` |
 | The Monitor's own LAN relay, and the CSP that constrains all of this | Tawny app: `android/.../LocalWeb.kt` |
 | Image | `Dockerfile` |
-| Deployment | `docker-compose.yml`, `docker-compose.portainer.yml` |
+| Deployment | `docker-compose.yml`, `docker-compose.portainer.yml`, `docker-compose.stack.yml` |
+| The cloud rendezvous the stock app uses (Worker + Durable Object, Deno port) | `app/rendezvous/` |
 | Everything above, checked | `probe.sh` |
 
 ---
@@ -244,7 +254,9 @@ and Tawny declined to advertise the single route the remote path depends on.
 
 * The `/lan` bridge only dials private address space (RFC1918, link-local, and
   `100.64/10`), ports ≥1024, at most 16 at once, and only for a request whose
-  `Origin` matches the page it served. A pairing link is something a stranger
+  `Origin` matches the page it served — or is a loopback origin, which only the
+  app's own WebView has (`originAllowed()`; no internet page loads from
+  `127.0.0.1`). A pairing link is something a stranger
   can hand you, so the target is checked twice — in `app.js` before it is used
   and in `server.js` before a socket opens.
 * The LAN hop is cleartext, the same exposure the Android app has always had

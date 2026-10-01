@@ -27,7 +27,7 @@ id = "a8cb27e35c234a54b3a15f5ea6118b76"
 binding = "REPORTS"
 id = "d4f70cb39ee04b8f807437e78b021320"
 
-# Atomic per-IP rate limiting. The KV counter below is a read-modify-write
+# Atomic per-IP rate limiting. The KV counter above is a read-modify-write
 # against an eventually-consistent store, so a burst walks through it; this
 # binding is the real limit and the KV path is only a fallback.
 [[unsafe.bindings]]

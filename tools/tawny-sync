@@ -28,6 +28,8 @@ git -C "$src" archive "$ref" -- public | tar -x -C "$here/app"
 
 # Record provenance so a built image can be traced to a web-client commit.
 # Only public/ tracks Android; server.js et al. are this repo's own history.
-git -C "$src" rev-parse HEAD > "$here/app/.source-commit"
+# The commit actually archived — `$ref`, not HEAD, or a sync from an older ref
+# would be recorded as whatever the source checkout happens to be on.
+git -C "$src" rev-parse "$ref^{commit}" > "$here/app/.source-commit"
 echo "==> app/public/ now at $(cat "$here/app/.source-commit")"
 git -C "$here" status --short app 2>/dev/null || true

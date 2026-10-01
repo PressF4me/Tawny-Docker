@@ -1,6 +1,6 @@
 // Tawny rendezvous — Cloudflare Worker entry point.
 //
-// Serves four tiny endpoints and forwards signaling WebSockets to a per-room
+// Serves a handful of small endpoints and forwards signaling WebSockets to a per-room
 // Durable Object. Devices only ever dial *out* to this (wss:443); nothing here
 // listens on the devices themselves, so no inbound ports are opened anywhere.
 //
@@ -8,7 +8,10 @@
 //   GET /config.json          { stun, turnMode, authRequired:false }  (CORS *)
 //   GET /privacy              the privacy policy, as a static HTML page
 //   GET /turn?room=&t=        short-lived TURN credentials             (CORS *)
-//   GET /ws?room=&role=&t=    signaling relay  ->  Room Durable Object
+//   POST /report              a diagnostics report from the app       (reports.js)
+//   GET /report/pull          drain/read stored reports, key-gated    (reports.js)
+//   GET /ws?room=&role=       signaling relay  ->  Room Durable Object
+//                             (the ticket rides the first frame, never the URL)
 //
 // Secrets (wrangler secret put ...):
 //   TURN_KEY_ID / TURN_API_TOKEN   Cloudflare Realtime TURN (preferred), OR

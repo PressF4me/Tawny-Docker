@@ -404,6 +404,10 @@ ts_health() {
 ts_fail_kind() { # up_log
 	txt="$(cat "$1" 2>/dev/null || true)
 $(ts_health)"
+	# Lowercased, as classifyUp() in server.js does: `case` is case-sensitive,
+	# so "Expired" or "Unauthorized" used to land in one arm here and another
+	# there, though the two are meant to agree.
+	txt="$(printf '%s' "$txt" | tr '[:upper:]' '[:lower:]')"
 	# Order matters, and so does what is NOT a signal here. Getting this wrong
 	# is destructive: `stale` archives the node identity, so a household whose
 	# internet happens to be down at boot would come back needing a fresh auth
@@ -425,7 +429,7 @@ $(ts_health)"
 	case "$txt" in
 		*"already exists"*|*"wrong nodekey"*|*"duplicate node key"*|*"node key has been used"*) echo stale ;;
 		*"invalid key"*|*"bad authkey"*|*"authkey"*|*expired*|*"is not valid"*|*"requires an auth key"*|*unauthorized*|*"not permitted"*|*"http 401"*|*"http 403"*) echo badkey ;;
-		*timeout*|*deadline*|*"dial tcp"*|*"no route to host"*|*"lookup "*|*"failed to resolve"*|*"no dns"*|*"network is unreachable"*|*"i/o timeout"*|*"connection refused"*|*"TLS handshake"*) echo network ;;
+		*timeout*|*deadline*|*"dial tcp"*|*"no route to host"*|*"lookup "*|*"failed to resolve"*|*"no dns"*|*"network is unreachable"*|*"i/o timeout"*|*"connection refused"*|*"tls handshake"*) echo network ;;
 		*"register request: http 4"*) echo stale ;;
 		*) echo unknown ;;
 	esac

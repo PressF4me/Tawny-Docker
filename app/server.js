@@ -30,7 +30,8 @@ import {
 
 const PORT = Number(process.env.PORT || 8099);
 const HOST = process.env.HOST || '0.0.0.0';
-// One plain HTTP listener, and that is all.
+// One plain HTTP listener — plus, only under tighter privacy with the
+// operator's own certificate, a TLS one (see the listener section at the end).
 //
 // A browser grants getUserMedia on a secure origin only, so talk-back needs
 // https — but this process does not terminate it. `tailscale serve` does, with
@@ -324,9 +325,9 @@ function hostAllowed(req) {
  * proxy, on a tailnet, in bridge networking. The Host header, by contrast, is
  * the one address the client has already proved it can resolve and reach.
  *
- * `X-Forwarded-Host`/`-Proto` are honoured only from a loopback peer, i.e. a
- * proxy on this host (the same rule clientIP() uses); a remote client cannot
- * forge them. hostAllowed() has already vetted the result against
+ * `X-Forwarded-Host`/`-Proto` are honoured only from a trusted proxy peer —
+ * loopback or private address space, the same rule clientIP() uses (see
+ * fromTrustedProxy()); a client on the internet cannot forge them. hostAllowed() has already vetted the result against
  * ALLOWED_HOSTS when the operator set one.
  */
 function reqOrigin(req) {
@@ -833,7 +834,17 @@ function readJsonBody(req, limit = 8192) {
   });
 }
 
-/** Append to the same file docker/entrypoint.sh writes, in the same shape. */
+/**
+ * Append to the same file docker/entrypoint.sh writes, in the same shape.
+ *
+ * Bounded. tryServe() records a result on every /setup poll while `serve` is
+ * failing — every 4 s for as long as the page is open with HTTPS certificates
+ * off — and the whole file is re-read and re-parsed on each of those polls. A
+ * result identical to the step's newest record only refreshes its timestamp,
+ * and past STEP_LOG_MAX the log keeps the newest record of every step (all any
+ * reader uses — see latestSteps() in public/setup.js) plus the most recent tail.
+ */
+const STEP_LOG_MAX = 400;
 function recordStep(step, ok, detail, kind = '') {
   if (!TAWNY_SETUP_STATE) return;
   try {
@@ -842,7 +853,21 @@ function recordStep(step, ok, detail, kind = '') {
       const parsed = JSON.parse(readFileSync(TAWNY_SETUP_STATE, 'utf8'));
       if (Array.isArray(parsed)) arr = parsed;
     } catch { /* first write, or a truncated file — start clean */ }
-    arr.push({ step, ok, detail, kind, at: new Date().toISOString() });
+    const at = new Date().toISOString();
+    let last = null;
+    for (let i = arr.length - 1; i >= 0; i--) if (arr[i] && arr[i].step === step) { last = arr[i]; break; }
+    if (last && last.ok === ok && last.detail === detail && (last.kind || '') === kind) {
+      last.at = at;
+    } else {
+      arr.push({ step, ok, detail, kind, at });
+    }
+    if (arr.length > STEP_LOG_MAX) {
+      const newest = new Map();
+      arr.forEach((s, i) => { if (s && s.step) newest.set(s.step, i); });
+      const keep = new Set(newest.values());
+      const tailFrom = arr.length - STEP_LOG_MAX / 2;
+      arr = arr.filter((s, i) => i >= tailFrom || keep.has(i));
+    }
     writeFileSync(TAWNY_SETUP_STATE, JSON.stringify(arr));
   } catch { /* state file is a convenience; never fail a request over it */ }
 }
@@ -941,7 +966,7 @@ async function tryServe() {
 }
 
 /**
- * Advertise TAWNY_TS_ROUTES on the container's own tailscaled socket, unless
+ * Advertise ourRoute() on the container's own tailscaled socket, unless
  * another peer already carries an overlapping range — see
  * docker/route-conflict.js for why that combination is the "internet goes in
  * a loop" report. `force` is the operator overriding that check from /setup
@@ -1923,9 +1948,10 @@ function log(line) {
 
 // ------------------------------------------------------------- listener
 //
-// One, plain HTTP. `tailscale serve` sits in front of it and is what a browser
-// actually talks to — https://<node>.<tailnet>.ts.net, Let's Encrypt, no
-// warning and nothing for anyone to import. The X-Forwarded-* headers it sets
+// One plain HTTP listener, plus the optional TLS one below for tighter privacy
+// with the operator's own certificate. `tailscale serve` sits in front of the
+// plain one and is what a browser actually talks to — https://<node>.<tailnet>
+// .ts.net, Let's Encrypt, no warning and nothing for anyone to import. The X-Forwarded-* headers it sets
 // are how /config.json still hands a client the address it really arrived on;
 // see reqOrigin().
 

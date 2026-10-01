@@ -45,7 +45,7 @@ a browser; the only thing that ever sees the stream is you.
 
 ## 🤗 Supporting it
 
-<a href="https://ko-fi.com/A6N425ZWFE"><img src="https://ko-fi.com/img/githubbutton_sm.svg" height="30" alt="Support me on Ko-fi"></a>
+<a href="https://ko-fi.com/tawnyone"><img src="https://ko-fi.com/img/githubbutton_sm.svg" height="30" alt="Support me on Ko-fi"></a>
 <a href="https://strike.me/@loustrikes"><img src="docs/media/lightning-button.png" height="30" alt="Tip in Bitcoin"></a>
 
 Tawny is free: no ads, no account, no paywall, nothing locked. Chipping in
@@ -100,8 +100,10 @@ docker compose up -d
 
 Pin a version with `TAWNY_TAG=2.0.3` in `.env` instead of tracking `latest`;
 upgrade later with `docker compose pull && docker compose up -d`. On start the
-container joins your tailnet as node `tawny`, detects its LAN, advertises that
-subnet, and publishes the app. `docker logs tawny` prints the URL and the route.
+container joins your tailnet as node `tawny`, detects its LAN, and publishes the
+app; `docker logs tawny` prints the URL. Advertising that LAN into the tailnet —
+what lets you watch from outside the house — is off until you say so: `/setup`
+asks, once, and remembers the answer.
 
 **4. Approve the subnet route, and disable key expiry.** Open
 `http://<box>:8099/setup` from the LAN — it shows live status and names the
@@ -112,7 +114,8 @@ you're in that same **⋯** menu, also choose **Disable key expiry** — Tawny
 runs unattended, and without this Tailscale logs it out roughly every 180
 days, silently breaking remote access until someone notices and pastes a
 fresh key in `/setup` or `.env`. If `/setup` says HTTPS isn't on, step 2 was
-skipped — fix it and `docker compose restart`.
+skipped — turn it on; Tawny retries `tailscale serve` every few seconds while
+`/setup` is open, so no restart is needed.
 
 **5. Put your devices on the tailnet.** Every viewing device and the Monitor
 phone need Tailscale, signed into the same tailnet, with subnet routes accepted
@@ -161,7 +164,7 @@ first so the relay check can bind port 3478.
 
 | Port | What |
 |---|---|
-| 8099 | the app, plain HTTP. `tailscale serve` terminates TLS in front of it; only reached from `localhost`. |
+| 8099 | the app, plain HTTP. `tailscale serve` terminates TLS in front of it and reaches it on `localhost`; on your LAN it is where `/setup` lives. |
 | 3478, 49160-49200/udp | the built-in relay — fallback for a network that blocks direct UDP. Nothing to forward. |
 
 No HTTPS port on the container. TLS is Tailscale's.
@@ -178,7 +181,7 @@ next step.
 | Container never came up, `/healthz` dead | `docker logs tawny`; `docker ps -a` if no output at all. |
 | `/setup`: `tailscale up FAILED` / key rejected | Auth key expired, already used (not Reusable), or wrong tailnet. Fresh key in `.env`, `docker compose restart`. |
 | `/setup`: "leftover identity — needs a hand" (or a join that hangs then fails despite a good key) | A Tailscale identity from an earlier run is stuck in `tawny-data` and the coordination server won't take it back. Tawny normally clears it automatically; if it can't, press **Reset Tailscale identity** on `/setup`, or `docker exec <container> rm -rf /data/tailscale` and restart. The old state is kept at `/data/tailscale.broken-…`. |
-| `https://tawny.<tailnet>.ts.net` won't open, or `/setup`: `serve FAILED` re HTTPS/MagicDNS | Step 2 skipped. Enable MagicDNS then HTTPS Certificates, `docker compose restart`. |
+| `https://tawny.<tailnet>.ts.net` won't open, or `/setup`: `serve FAILED` re HTTPS/MagicDNS | Step 2 skipped. Enable MagicDNS then HTTPS Certificates, and keep `/setup` open — it retries and publishes within seconds, no restart. |
 | Address opens on the box but not on your laptop/phone | That device also needs Tailscale up with MagicDNS on. On the box's LAN, `http://<box>:8099` works (no talk-back). |
 | Viewer loads, "Join" hangs, no video | Subnet route not approved yet (`/setup` confirms). If approved, check the Viewer has `--accept-routes`. |
 | "Pairing code expired" | Phone unreachable — usually its IP changed: show a fresh code. Confirm it's on the **same** Wi-Fi as the box, not a guest VLAN (that blocks the phone's relay). |
@@ -229,9 +232,9 @@ This container is the bridge: the app as the Monitor, and a **browser Viewer**
 both-ways too; either role can be a browser, either can be the app.
 
 For **phone-to-phone remote pairing without this container at all** — both ends
-the Tawny app, on different networks — see the `rendezvous/` service in the
-Tawny app repo: a Cloudflare Worker / Deno signalling introducer. The two paths
-are independent and can run together.
+the Tawny app, on different networks — see `app/rendezvous/` in this repo: a
+Cloudflare Worker / Deno signalling introducer (the one the stock app uses). The
+two paths are independent and can run together.
 
 ---
 
@@ -241,7 +244,7 @@ The published image is the supported path. To build locally — a fork, an
 unreleased change, an air-gapped registry:
 
 ```sh
-bash tools/tawny-sync        # vendor the server payload into app/ from ../Tawny Android
+bash tools/tawny-sync        # refresh the web client in app/public/ from ../Tawny Android
                              #   (override the source with TAWNY_ANDROID=/path)
 docker build --network=host -t ghcr.io/pressf4me/tawny:latest .
 docker compose up -d         # picks up the local image (pull_policy: missing)

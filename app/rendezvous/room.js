@@ -311,17 +311,34 @@ export class Room {
     // back a window the admission path now handles for free: the owner proves
     // the channel key and takes the room back (see 4005 above).
 
+    // One alarm serves both jobs below, and fetch() pulls it forward to a new
+    // socket's admit deadline. So every path through here reschedules for
+    // whatever is due next. It used to return without doing so, which dropped
+    // the ticket's own wake-up whenever no Monitor was present — and left a
+    // socket that connected a few seconds after the one being swept pending
+    // until it hung up of its own accord.
+    const now = Date.now();
+    let next = Infinity;
+
     // Sweep sockets that connected and never said hello.
-    const cutoff = Date.now() - ADMIT_TIMEOUT_MS;
+    const cutoff = now - ADMIT_TIMEOUT_MS;
     for (const w of this.state.getWebSockets()) {
       const m = w.deserializeAttachment();
-      if (m?.pending && (m.since || 0) < cutoff) {
+      if (!m?.pending) continue;
+      // <=, not <: the alarm is set for exactly since + ADMIT_TIMEOUT_MS and
+      // can fire on the dot, which a strict comparison would spare.
+      if ((m.since || 0) <= cutoff) {
         try { w.close(...CLOSE.NO_HELLO); } catch {}
+      } else {
+        next = Math.min(next, (m.since || now) + ADMIT_TIMEOUT_MS);
       }
     }
+    const wakeAt = async (t) => {
+      if (Number.isFinite(t)) await this.state.storage.setAlarm(t);
+    };
 
     const rec = await this.state.storage.get('ticket');
-    if (!rec) return;
+    if (!rec) { await wakeAt(next); return; }
     // A Monitor that is plugged in and left alone — the whole point of the
     // product — registers its ticket once and never says hello again. Expiring
     // it out from under a live Monitor locked out every new Handheld with 4008
@@ -335,13 +352,16 @@ export class Room {
       // comes first, so the ticket is actually dropped when its life is up
       // rather than lingering until something else happens to touch the room.
       const ceiling = issuedAt(rec) + TICKET_MAX_LIFETIME_MS;
-      await this.state.storage.setAlarm(
-        Math.min(Date.now() + TICKET_TTL_MS, ceiling) + 60_000
-      );
+      await wakeAt(Math.min(next, Math.min(now + TICKET_TTL_MS, ceiling) + 60_000));
       return;
     }
-    if (Date.now() > rec.exp || beyondLifetime(rec)) {
+    if (now > rec.exp || beyondLifetime(rec, now)) {
       await this.state.storage.delete('ticket');
+      await wakeAt(next);
+      return;
     }
+    // Still live with no Monitor here: wake when it lapses, to drop it then.
+    const ceiling = issuedAt(rec) + TICKET_MAX_LIFETIME_MS;
+    await wakeAt(Math.min(next, Math.min(rec.exp, ceiling) + 60_000));
   }
 }

@@ -1,8 +1,8 @@
 # Tawny rendezvous
 
 **For phone-to-phone remote pairing** when the Monitor and the Viewer are on
-different networks; see `../Tawny Docker/` instead if you want a browser Viewer
-over your own Tailscale.
+different networks; see the Tawny Docker README (the repo this folder lives in)
+instead if you want a browser Viewer over your own Tailscale.
 
 > **This folder is the deployed Worker.** `wrangler deploy` runs from here
 > (`Tawny Docker/app/rendezvous`), and nowhere else. In a Tawny Android checkout,
@@ -169,10 +169,14 @@ ports — they dial the relay outbound.
 | `GET /config.json` | `{ stun, turnMode, authRequired:false }` (CORS `*`) |
 | `GET /privacy` | the privacy policy as a static page — the URL to give Play |
 | `GET /turn?room=&t=` | short-lived `{ iceServers, ttl }` or 404 |
-| `GET /ws?room=&role=&t=` | signaling relay → per-room actor |
+| `POST /report` | a diagnostics report from the app's "Send to Tawny" (`reports.js`) |
+| `GET /report/pull` | read / drain stored reports, key-gated (`reports.js`) |
+| `GET /ws?room=&role=` | signaling relay → per-room actor |
 
 `room` is `sha256("tawny-room-v1|" + channelKey)` truncated to 32 hex, computed
-on the device. `t` is a per-pairing admission ticket: the Monitor registers
+on the device. `t` is a per-pairing admission ticket — on `/ws` it rides the
+first `{type:'hello'}` frame, never the URL, because query strings land in
+access logs. The Monitor registers
 `sha256(t)` for its room on connect; a Viewer must present the matching `t`.
 The ticket is admission + abuse control — it is **not** what protects the media
 (that is the 128-bit channel key, which never reaches this service).
