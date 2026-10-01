@@ -19,7 +19,7 @@
 //   deno/main.ts     (Deno Deploy alternative)
 //   ../server.js     (self-host reference)
 
-export const PRIVACY_UPDATED = '2026-09-19';
+export const PRIVACY_UPDATED = '2026-10-01';
 
 export const PRIVACY_HEADERS = {
   'content-type': 'text/html; charset=utf-8',
@@ -126,6 +126,12 @@ export const PRIVACY_HTML = `<!doctype html>
       <td>No.</td>
     </tr>
     <tr>
+      <td><strong>Video clips you save</strong> (&ldquo;Record&rdquo;)</td>
+      <td>Short clips, up to 20 seconds, saved to your device's Movies folder,
+        in a &ldquo;Tawny&rdquo; album.</td>
+      <td>No.</td>
+    </tr>
+    <tr>
       <td><strong>Diagnostics log</strong></td>
       <td>An optional, deliberately out-of-the-way log (long-press the small
         version number) for working out why a connection failed. Records hashed
@@ -229,10 +235,10 @@ export const PRIVACY_HTML = `<!doctype html>
   information from them.</p>
 
   <h2>Security</h2>
-  <p>Media is encrypted in transit (DTLS-SRTP). Every connection made over
-  the internet to a monitor shows a short safety code on both screens for you to
-  compare, which detects a tampered relay. A fresh code is drawn for each
-  connection, so compare it each time rather than expecting the same one twice.
+  <p>Media is encrypted in transit (DTLS-SRTP). The first time a phone connects
+  to a monitor over the internet, both screens show a short safety code for you
+  to compare, which detects a tampered relay. You are asked once per phone:
+  after you confirm the codes match, that phone is not asked again.
   Pairing codes are like a key to your channel —
   only share them with devices you own, and re-pair if a code may have
   leaked.</p>

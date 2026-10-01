@@ -102,10 +102,10 @@ const S = {
 const MAX_VIEWERS = 3;
 
 // The one sentence a refused fourth phone sees, wherever the refusal came from
-// — the Monitor's own cap or a relay's 4003.
-const FULL_MESSAGE =
-  `This monitor is full (${MAX_VIEWERS} phones). Close Tawny on one of the `
-  + 'other phones, then try this code again.';
+// — the Monitor's own cap or a relay's 4003. Looked up when it is said, not at
+// load: the native shell sets the language after this script has run, and its
+// "monitor full" screen shows this sentence as-is.
+const fullMessage = () => TawnyT.t('w_msg_full', MAX_VIEWERS);
 
 // How long a pairing code is good for.
 //
@@ -124,9 +124,7 @@ const CLOCK_SKEW_MS = 24 * 60 * 60 * 1000;
 // The one sentence a phone sees when it arrives with a code that has run out,
 // wherever the refusal came from — its own pre-flight check on the scanned
 // link, or the Monitor turning it away over LAN or the internet relay.
-const EXPIRED_MESSAGE =
-  'That pairing code has expired. Show a new code on the monitor phone and '
-  + 'scan it again.';
+const expiredMessage = () => TawnyT.t('w_msg_expired');
 
 // A pairing link may name the relay the two phones should meet on (`rv=`). It
 // is attacker-supplyable — it arrives in the same fragment as the key — so it
@@ -1349,8 +1347,8 @@ $('#scan-paste').addEventListener('click', () => { S.scanStop?.(); promptPasteLi
 // URL, a scanned code, a `tawny://pair` intent — and from here it is echoed
 // into the signalling `hello` frame and the /turn query string. Hold it to the
 // same charset every relay validates it against (TICKET_RE in worker.js,
-// room.js and deno/main.ts, and the identical Regex in MainActivity's
-// parsePairing) rather than forwarding whatever turned up. A ticket outside
+// room.js and deno/main.ts, and the identical TOKEN_RE in PairLink.kt) rather
+// than forwarding whatever turned up. A ticket outside
 // this set can only ever be refused, so refuse the whole link now instead of
 // half-adopting a channel that will fail admission later.
 const TICKET_RE = /^[A-Za-z0-9_-]{8,64}$/;
@@ -1406,7 +1404,7 @@ function adopt(raw) {
   // refuses a lapsed code itself and gets the same sentence back here.
   const exp = Number(p.get('e'));
   if (Number.isFinite(exp) && exp > 0 && Date.now() > exp * 1000 + CLOCK_SKEW_MS) {
-    lastPairError = EXPIRED_MESSAGE;
+    lastPairError = expiredMessage();
     return false;
   }
   const code = p.get('c');
@@ -1446,7 +1444,10 @@ function adopt(raw) {
     try {
       const r = new URL(rv);
       const allowed = [location.host, hostOf(S.cfg.rendezvous), hostOf(S.cfg.rendezvousFallback)];
-      ok = r.protocol === 'https:' && allowed.includes(r.host);
+      // pairLink() writes `rv` as the configured rendezvous verbatim, which is
+      // a wss:// URL — so wss: has to be read back, not only https:. The same
+      // two schemes PairLink.kt accepts on the phone.
+      ok = (r.protocol === 'https:' || r.protocol === 'wss:') && allowed.includes(r.host);
       if (ok) S.linkRelay = wsBase(r.origin);
     } catch {}
     if (!ok) lastRelayNote = RELAY_MISMATCH_MESSAGE;
@@ -1956,14 +1957,13 @@ async function showSas(peer, attempt = 0, since = Date.now()) {
 
 /** Monitor: Handhelds whose code has not been confirmed yet, oldest first.
  *
- *  Once per Handheld *device*, not once per channel, and over any path. It
- *  used to be both of the other things: vouching for one phone's code marked
- *  the whole channel reviewed, and LAN Handhelds were skipped because the
- *  Monitor is their relay. But the Handheld keeps its own review flag and
- *  shows its card whatever the path, so a second phone - or any phone on the
- *  Wi-Fi - got a code on its screen that the Monitor never showed to compare
- *  against. Both ends now ask under the same rule: the first time this
- *  particular Handheld connects. */
+ *  Once per Handheld *device*, not once per channel. It used to be once per
+ *  channel: vouching for one phone's code marked the whole channel reviewed,
+ *  so a second phone got a code on its screen that the Monitor never showed to
+ *  compare against. Both ends now ask under the same rule: the first time this
+ *  particular Handheld connects over the cloud relay. (A LAN connection never
+ *  gets this far — showSas() skips it, because there the Monitor *is* the
+ *  relay.) */
 function sasPendingViewers() {
   return viewerPeers().filter(
     (p) => p.sas && !p.sasOk && !viewerSasReviewed(p)
@@ -2268,7 +2268,7 @@ function openSignal(base, tag) {
           return;
         }
         return bail(
-          ev.code === 4003 ? FULL_MESSAGE
+          ev.code === 4003 ? fullMessage()
           : ev.code === 4004 ? TawnyT.t('w_bail_already_running')
           // 4010: the relay has no ticket for this room at all, so no Monitor
           // has ever connected. The code in this person's hand is fine and
@@ -2286,7 +2286,7 @@ function openSignal(base, tag) {
           // the room. Different cause from the Monitor's pairing gate, same
           // thing to do about it, so it gets the same sentence and the same
           // screen in the native shell.
-          : EXPIRED_MESSAGE,
+          : expiredMessage(),
           ev.code === 4003 ? 'full'
             : ev.code === 4008 && S.role === 'viewer' && !S.token ? 'noticket'
             : ev.code === 4008 ? 'expired'
@@ -2907,10 +2907,10 @@ async function handle(m, entry) {
       // A Monitor at its cap says goodbye with a reason. Anything else is an
       // ordinary hang-up and must stay one — a plain `bye` ends the call, it
       // does not accuse the Monitor of being full.
-      if (m.reason === 'full' && S.role === 'viewer') return bail(FULL_MESSAGE, 'full');
+      if (m.reason === 'full' && S.role === 'viewer') return bail(fullMessage(), 'full');
       // Refused at the pairing gate: the code this phone arrived with is no
       // longer the one the Monitor is showing. Say that, not "call ended".
-      if (m.reason === 'expired' && S.role === 'viewer') return bail(EXPIRED_MESSAGE, 'expired');
+      if (m.reason === 'expired' && S.role === 'viewer') return bail(expiredMessage(), 'expired');
       removePeer(m.from);
       if (!S.peers.size) status(S.role === 'viewer' ? TawnyT.t('w_status_call_ended') : TawnyT.t('w_status_waiting'), 'wait');
       break;
@@ -3602,7 +3602,7 @@ async function switchLens(index) {
       audio: false
     });
     const nt = ns.getVideoTracks()[0];
-    try { nt.contentHint = 'motion'; } catch {}
+    try { nt.contentHint = 'detail'; } catch {}   // as tuneVideoSender sets it
     // Adopt and show the new lens *before* shaping it: the shape check reads
     // the delivered frame off the preview, so it has to be the preview first.
     S.local.getVideoTracks().forEach((t) => { S.local.removeTrack(t); t.stop(); });
@@ -3996,7 +3996,7 @@ async function start(role, opts = {}) {
   } catch (err) {
     return bail(err.name === 'NotAllowedError'
       ? TawnyT.t('w_bail_cam_mic_blocked')
-      : `Could not open the camera or microphone (${err.name}).`);
+      : TawnyT.t('w_bail_cam_mic_failed', err.name));
   }
   // Attach the preview now, so frames start flowing at once — the shaping
   // itself waits until the station UI below has the preview on screen, because
@@ -4515,7 +4515,7 @@ $('#btn-flip').addEventListener('click', async () => {
   }
 
   const track = stream.getVideoTracks()[0];
-  try { track.contentHint = 'motion'; } catch {}
+  try { track.contentHint = 'detail'; } catch {}   // as tuneVideoSender sets it
   // Show it before shaping it — the shape check measures the delivered frame.
   S.local.addTrack(track);
   el.local.srcObject = S.local;
@@ -5217,9 +5217,6 @@ for (const ev of ['resize', 'orientationchange']) {
     applyRotations();
   });
 }
-// A `resize` on the <video> is the far phone turning, or the bitrate ladder
-// stepping resolution. Either way the box the picture is fitted into may need
-// re-measuring.
 /**
  * The flight recorder's view of the thing this whole section is about: the
  * shape of the picture actually on screen, next to the shape of the window it
@@ -5237,6 +5234,9 @@ function logShape(what, v) {
     `${shape === win ? 'MATCH' : 'MISMATCH'}`);
 }
 
+// A `resize` on the <video> is the far phone turning, or the bitrate ladder
+// stepping resolution. Either way the box the picture is fitted into may need
+// re-measuring.
 el.remote.addEventListener('resize', () => {
   applyRemoteRotation();
   logShape('rx', el.remote);          // the Viewer's stage: what it must fit
