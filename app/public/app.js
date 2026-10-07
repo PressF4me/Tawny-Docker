@@ -5003,11 +5003,14 @@ window.tawnyPairCode = function (code, expMs) {
 
 // ----------------------------------------------------------- update board
 //
-// Once per version, after an update, over the channel list. What is new
-// comes from `release` in config.json — { version, notes[], changelog } —
-// which each platform fills in for itself; a build that sends none simply
-// has no board. A fresh install has nothing to be "new" against, so its
-// first version is marked seen without showing anything.
+// Once per version, after an update, over the channel list or the welcome
+// screen. What is new comes from `release` in config.json — { version,
+// notes[], changelog, upgraded? } — which each platform fills in for itself;
+// a build that sends none simply has no board. A fresh install has nothing to
+// be "new" against, so its first version is marked seen without showing
+// anything. "Fresh" is a page with nothing set up, unless the platform says
+// otherwise: Tawny Desktop sends `upgraded` when an earlier run's profile was
+// already on disk, so an update installed before any setup still gets it.
 
 const WHATSNEW_SEEN = 'tawny.whatsnew.seen';
 
@@ -5018,8 +5021,10 @@ function maybeShowWhatsNew(fresh) {
   try { seen = localStorage.getItem(WHATSNEW_SEEN); } catch {}
   if (seen === String(r.version)) return;
   try { localStorage.setItem(WHATSNEW_SEEN, String(r.version)); } catch {}
-  if (fresh) return;
-  setTimeout(() => { if (!el.channels.hidden) showWhatsNew(r); }, 450);
+  if (fresh && r.upgraded !== true) return;
+  setTimeout(() => {
+    if (!el.channels.hidden || !el.welcome.hidden) showWhatsNew(r);
+  }, 450);
 }
 
 function showWhatsNew(r) {
