@@ -1,0 +1,10 @@
+{
+  "version": "2.2.5",
+  "notes": [
+    "Switch role goes straight to the other role",
+    "Browser Handhelds accept wss:// pairing links",
+    "/setup no longer floods its log while it waits",
+    "Silent relay connections are closed on time"
+  ],
+  "changelog": "https://github.com/PressF4me/Tawny-APK/blob/master/docs/changelog/docker.md"
+}

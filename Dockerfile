@@ -83,7 +83,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 # server.js only ever reads from these trees. Copy whole directories rather than
 # individual files so a new `import './rendezvous/…'` in server.js cannot
 # silently break the image the way the privacy-policy import did in 2026-08.
-COPY app/server.js ./
+COPY app/server.js app/whatsnew.json ./
 COPY app/public ./public
 COPY app/rendezvous ./rendezvous
 # Whole directory (not just entrypoint.sh) so entrypoint.sh's own

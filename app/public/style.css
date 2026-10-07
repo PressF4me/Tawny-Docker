@@ -2426,3 +2426,76 @@ body:has(#live:not([hidden])) #theme-toggle {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: none; }
 }
+
+/* ---------------------------------------------------------- update board
+   Once per version, after an update (app.js, maybeShowWhatsNew). The twin of
+   MainActivity.showWhatsNew: star, version, a few short notes, the
+   changelog, a thank-you and the footer's two tips. The confetti canvas
+   spans the whole sheet and never takes a touch. */
+
+.whatsnew { z-index: 45; }
+.wn-confetti {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+.wn-card { align-items: center; text-align: center; gap: 0; }
+.wn-star { width: 40px; height: 40px; margin-top: 10px; color: var(--berry); }
+.wn-star svg { width: 100%; height: 100%; fill: currentColor; }
+.wn-eyebrow {
+  margin: 10px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.sheet-card h2.wn-title {
+  margin: 4px 0 0;
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1.2;
+}
+.wn-notes {
+  align-self: stretch;
+  margin: 16px 0 0;
+  padding: 8px 14px;
+  list-style: none;
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+}
+.wn-notes li {
+  position: relative;
+  padding: 6px 0 6px 24px;
+  font-size: 15px;
+  line-height: 1.3;
+  color: var(--fg);
+}
+.wn-notes li::before {
+  content: "✦";
+  position: absolute;
+  left: 2px;
+  color: var(--berry);
+}
+.wn-changelog {
+  margin-top: 12px;
+  padding: 6px 10px;
+  font-size: 15px;
+  color: var(--berry);
+  text-decoration: none;
+}
+.wn-changelog:hover { text-decoration: underline; }
+.wn-thanks {
+  margin: 10px 0 0;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--dim);
+}
+.wn-tips { justify-content: center; margin-top: 14px; }
+.wn-card .sheet-actions { align-self: stretch; margin-top: 18px; }

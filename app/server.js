@@ -181,6 +181,19 @@ const MAX_ROOMS = 256;
 const ROOM_RE = /^[a-f0-9]{32}$/;
 const PUBLIC = join(fileURLToPath(new URL('.', import.meta.url)), 'public');
 
+// The update board's text for this release — { version, notes[], changelog }
+// — handed to the page in /config.json. Only when it names this package's own
+// version, so a bump that forgot to rewrite it shows no board rather than the
+// last release's notes.
+const RELEASE = (() => {
+  try {
+    const here = fileURLToPath(new URL('.', import.meta.url));
+    const { version } = JSON.parse(readFileSync(join(here, 'package.json'), 'utf8'));
+    const w = JSON.parse(readFileSync(join(here, 'whatsnew.json'), 'utf8'));
+    return w.version === version ? w : null;
+  } catch { return null; }
+})();
+
 function list(v) {
   return (v || '').split(',').map((s) => s.trim()).filter(Boolean);
 }
@@ -1321,6 +1334,7 @@ const handler = async (req, res) => {
       // The page's own policy has no "never"; it gets auto plus no TURN at all.
       turnMode: TURN_MODE,
       rendezvous, authRequired: false,
+      ...(RELEASE ? { release: RELEASE } : {}),
       // Tighter privacy: the page must not substitute a default for anything
       // listed here — an empty STUN list means none.
       ...(PRIVACY_ON ? { strict: true, turnFetch: TURN_MODE !== 'never' } : {})

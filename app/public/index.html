@@ -566,6 +566,60 @@
   </div>
 </div>
 
+<!-- ========================= UPDATE BOARD =======================
+     Once per version, after an update: what changed, in a line or three,
+     the changelog, a thank-you and the same two tips as the footer. Filled
+     from `release` in config.json, which each platform writes for itself
+     (Tawny Desktop's config.rs, Tawny Docker's server.js). The Android app
+     draws its own natively (MainActivity.showWhatsNew). -->
+<div id="whatsnew" class="sheet whatsnew" hidden>
+  <canvas id="wn-confetti" class="wn-confetti" aria-hidden="true"></canvas>
+  <div class="sheet-card wn-card" role="dialog" aria-modal="true" aria-labelledby="wn-title">
+    <span class="sheet-grip" aria-hidden="true"></span>
+    <span class="wn-star" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="m12 2.6 2.7 6 6.6.6-5 4.4 1.5 6.5L12 16.7l-5.8 3.4 1.5-6.5-5-4.4 6.6-.6z"/></svg>
+    </span>
+    <p id="wn-eyebrow" class="wn-eyebrow"></p>
+    <h2 id="wn-title" class="wn-title" data-i18n="w_whatsnew_title">Tawny just got better</h2>
+    <ul id="wn-notes" class="wn-notes"></ul>
+    <a id="wn-changelog" class="wn-changelog" href="#" target="_blank" rel="noopener noreferrer">
+      <span data-i18n="w_whatsnew_changelog">Read the full changelog</span> ↗</a>
+    <p class="wn-thanks" data-i18n="w_whatsnew_thanks">Thank you for supporting Tawny. It stays free for everyone because of people like you.</p>
+    <span class="tips wn-tips">
+      <a class="tip tip-kofi" href="https://ko-fi.com/tawnyone"
+         target="_blank" rel="noopener noreferrer">
+        <span class="tip-mark">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M12 7.3C9.1 5.3 8.5 3.9 9.3 3c.6-.7 1.8-.5 2.7.6.9-1.1 2.1-1.3 2.7-.6.8.9.2 2.3-2.7 4.3z"/>
+            <path d="M3.8 9.2h12.4v6.6a4.8 4.8 0 0 1-4.8 4.8H8.6a4.8 4.8 0 0 1-4.8-4.8z"/>
+            <path d="M16.7 10.6h1.1a3.2 3.2 0 0 1 0 6.4h-1.1v-2h1a1.2 1.2 0 0 0 0-2.4h-1z"/>
+            <path d="M3.1 21.1h13.8a.85.85 0 0 1 0 1.7H3.1a.85.85 0 0 1 0-1.7z"/>
+          </svg>
+        </span>
+        <span class="tip-label">
+          <span class="tip-base">Support Tawny on Ko-fi</span>
+          <span class="tip-alt" aria-hidden="true">ko-fi.com</span>
+        </span>
+      </a>
+      <a class="tip tip-bolt" href="https://strike.me/@loustrikes"
+         target="_blank" rel="noopener noreferrer">
+        <span class="tip-mark">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M15 1.8 5.8 13.2h5.2L9 22.2l9.2-11.4H13z"/>
+          </svg>
+        </span>
+        <span class="tip-label">
+          <span class="tip-base">Tip in Bitcoin</span>
+          <span class="tip-alt" aria-hidden="true">strike.me</span>
+        </span>
+      </a>
+    </span>
+    <div class="sheet-actions">
+      <button id="wn-done" class="wide primary" type="button" data-i18n="w_whatsnew_done">Let’s go</button>
+    </div>
+  </div>
+</div>
+
 <!-- ========================= NEW CHANNEL ======================== -->
 <div id="editor" class="sheet" hidden>
   <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="editor-title">

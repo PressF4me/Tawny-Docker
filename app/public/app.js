@@ -37,6 +37,7 @@ const el = {
   editor: $('#editor'), editorTitle: $('#editor-title'), editorName: $('#editor-name'),
   editorHint: $('#editor-hint'),
   rowMenu: $('#row-menu'), rowMenuTitle: $('#row-menu-title'),
+  whatsnew: $('#whatsnew'),
   scanner: $('#scanner'), scanVideo: $('#scan-video'), scanHint: $('#scan-hint'),
   welcome: $('#welcome'), setupRole: $('#setup-role'), setupNote: $('#setup-note'),
   watchPair: $('#watch-pair'), wpQr: $('#wp-qr'), wpStatus: $('#wp-status'),
@@ -4972,7 +4973,8 @@ window.tawnyPairCode = function (code, expMs) {
         rendezvousFallback: strict ? '' : S.cfg.rendezvousFallback,
         turn: S.cfg.turn,
         strict,
-        turnFetch: S.cfg.turnFetch === false || j.turnFetch === false ? false : undefined
+        turnFetch: S.cfg.turnFetch === false || j.turnFetch === false ? false : undefined,
+        release: j.release && typeof j.release === 'object' ? j.release : null
       };
     }
   } catch {}
@@ -4995,8 +4997,92 @@ window.tawnyPairCode = function (code, expMs) {
     try { onboarded = !!localStorage.getItem(ONBOARDED); } catch {}
     const fresh = getChannels().length === 0 && !onboarded;
     show(fresh ? el.welcome : el.channels);
+    maybeShowWhatsNew(fresh);
   }
 })();
+
+// ----------------------------------------------------------- update board
+//
+// Once per version, after an update, over the channel list. What is new
+// comes from `release` in config.json — { version, notes[], changelog } —
+// which each platform fills in for itself; a build that sends none simply
+// has no board. A fresh install has nothing to be "new" against, so its
+// first version is marked seen without showing anything.
+
+const WHATSNEW_SEEN = 'tawny.whatsnew.seen';
+
+function maybeShowWhatsNew(fresh) {
+  const r = S.cfg.release;
+  if (!r || !r.version || !Array.isArray(r.notes) || !r.notes.length) return;
+  let seen = null;
+  try { seen = localStorage.getItem(WHATSNEW_SEEN); } catch {}
+  if (seen === String(r.version)) return;
+  try { localStorage.setItem(WHATSNEW_SEEN, String(r.version)); } catch {}
+  if (fresh) return;
+  setTimeout(() => { if (!el.channels.hidden) showWhatsNew(r); }, 450);
+}
+
+function showWhatsNew(r) {
+  $('#wn-eyebrow').textContent = TawnyT.t('w_whatsnew_eyebrow', r.version);
+  const list = $('#wn-notes');
+  list.textContent = '';
+  for (const n of r.notes.slice(0, 4)) {
+    const li = document.createElement('li');
+    li.textContent = String(n);
+    list.appendChild(li);
+  }
+  const log = $('#wn-changelog');
+  log.hidden = !/^https:\/\//.test(r.changelog || '');
+  if (!log.hidden) log.href = r.changelog;
+  openSheet(el.whatsnew);
+  if (!motionOff()) confetti($('#wn-confetti'));
+}
+
+$('#wn-done').addEventListener('click', () => closeSheet(el.whatsnew));
+
+/** One burst of paper across the whole window, then the canvas goes idle. */
+function confetti(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  const g = canvas.getContext('2d');
+  g.scale(dpr, dpr);
+  const css = getComputedStyle(document.documentElement);
+  const hues = ['--berry', '--sky', '--live'].map((v) => css.getPropertyValue(v).trim())
+    .concat(['#e8b04b', '#f29bb0']);
+  const bits = Array.from({ length: 110 }, () => ({
+    x: Math.random() * w, y: -Math.random() * h * 0.55 - 10,
+    vx: (Math.random() - 0.5) * 60, vy: 120 + Math.random() * 160,
+    rot: Math.random() * 6.28, spin: (Math.random() - 0.5) * 9.4,
+    w: 5 + Math.random() * 6, h: 3 + Math.random() * 4,
+    c: hues[(Math.random() * hues.length) | 0],
+    round: Math.random() < 0.25, ph: Math.random() * 6.28
+  }));
+  const LIFE = 3.6;
+  let age = 0, last = 0;
+  const frame = (t) => {
+    const dt = last ? Math.min((t - last) / 1000, 0.05) : 0;
+    last = t; age += dt;
+    g.clearRect(0, 0, w, h);
+    g.globalAlpha = Math.max(0, Math.min(1, (LIFE - age) / 0.8));
+    for (const b of bits) {
+      b.vy += 90 * dt;
+      b.x += (b.vx + Math.sin(age * 3 + b.ph) * 40) * dt;
+      b.y += b.vy * dt;
+      b.rot += b.spin * dt;
+      g.save();
+      g.translate(b.x, b.y); g.rotate(b.rot);
+      g.scale(0.35 + 0.65 * Math.abs(Math.cos(age * 5 + b.ph)), 1);
+      g.fillStyle = b.c;
+      if (b.round) { g.beginPath(); g.arc(0, 0, b.h * 0.7, 0, 6.29); g.fill(); }
+      else g.fillRect(-b.w / 2, -b.h / 2, b.w, b.h);
+      g.restore();
+    }
+    if (age < LIFE && !el.whatsnew.hidden) requestAnimationFrame(frame);
+    else g.clearRect(0, 0, w, h);
+  };
+  requestAnimationFrame(frame);
+}
 
 window.addEventListener('tawny:background', () => {
   // "Backgrounded" was a developer word rendered straight into the live rail.
