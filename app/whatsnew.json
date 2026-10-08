@@ -1,8 +1,7 @@
 {
-  "version": "2.2.6",
+  "version": "2.2.7",
   "notes": [
-    "After an update, Tawny now shows what changed",
-    "Each update links to its full changelog"
+    "Adding or pairing a camera no longer fails on a page opened over plain http or in an older browser"
   ],
   "changelog": "https://github.com/PressF4me/Tawny-APK/blob/master/docs/changelog/docker.md"
 }
