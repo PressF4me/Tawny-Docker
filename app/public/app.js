@@ -211,6 +211,21 @@ function newKey() {
 }
 
 /**
+ * A random v4 UUID for a monitor's id. crypto.randomUUID() needs Chrome 92+
+ * and a secure context: Android 11's stock WebView and a Docker page served
+ * over plain http on the LAN have neither, and it threw there.
+ */
+function newId() {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
+/**
  * The host (name plus port) of a URL, or '' when it is not one. Used to
  * compare a link's relay against the ones this build is willing to dial, and
  * to decide whether a pairing link needs to name its relay at all.
@@ -726,7 +741,7 @@ function saveEditor() {
     if (found) found.name = name;
   } else {
     if (list.length >= 12) return toast('That is as many monitors as Tawny keeps.');
-    fresh = { id: crypto.randomUUID(), name, key: newKey() };
+    fresh = { id: newId(), name, key: newKey() };
     list.push(fresh);
   }
   setChannels(list);
@@ -780,7 +795,7 @@ function markOnboarded() {
 function watcherChannel() {
   const list = getChannels();
   if (list.length) return list[0];
-  const ch = { id: crypto.randomUUID(), name: 'Pet camera', key: newKey() };
+  const ch = { id: newId(), name: 'Pet camera', key: newKey() };
   setChannels([ch]);
   renderChannels();
   return ch;
@@ -1457,7 +1472,7 @@ function adopt(raw) {
   const list = getChannels();
   let ch = list.find((c) => c.key === key);
   if (!ch) {
-    ch = { id: crypto.randomUUID(), name, key };
+    ch = { id: newId(), name, key };
     list.push(ch);
     setChannels(list);
   }
@@ -4909,7 +4924,7 @@ window.tawnyStart = function (role, key, name, signalUrl, rendezvousUrl, token, 
   const list = getChannels();
   let ch = list.find((c) => c.key === key);
   if (!ch) {
-    ch = { id: crypto.randomUUID(), name: wanted, key };
+    ch = { id: newId(), name: wanted, key };
     list.push(ch);
     setChannels(list);
     renderChannels();
