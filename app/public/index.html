@@ -402,7 +402,13 @@
       </div>
       <div id="meter" class="meter" role="img" aria-label="Sound level at the far end" data-i18n-aria="w_aria_sound_level"></div>
       <div class="rail-right">
-        <span id="peercount" class="tag-count" hidden aria-label="Phones watching" data-i18n-aria="w_aria_phones_watching">
+        <!-- Monitor only, when its "Announce viewers" switch is on: says to
+             anyone in the room that every phone that starts watching is
+             announced with a sound. -->
+        <span id="announcechip" hidden role="img" aria-label="Viewers are announced with a sound" data-i18n-aria="w_aria_announce">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.6 1.8H4.4Z"/><path d="M10 20.6a2.2 2.2 0 0 0 4 0"/></svg><b data-i18n="w_announce_chip">Announced</b>
+        </span>
+        <span id="peercount" class="tag-count" hidden role="button" tabindex="0" aria-label="Phones watching" data-i18n-aria="w_aria_phones_watching">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2.5" width="12" height="19" rx="2.6"/><line x1="10.5" y1="18.4" x2="13.5" y2="18.4"/></svg><b></b>
         </span>
         <span id="peerlabel" class="tag-device" hidden></span>
@@ -616,6 +622,43 @@
     </span>
     <div class="sheet-actions">
       <button id="wn-done" class="wide primary" type="button" data-i18n="w_whatsnew_done">Let’s go</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================= WHO'S HERE =========================
+     Opened from the phone-count chip in the live rail, on the Monitor and on
+     every Viewer: everyone on this camera right now, by the name each person
+     gave and the phone they are on. The Monitor is the source of the list;
+     a Viewer shows what the Monitor last sent. -->
+<div id="who" class="sheet" hidden>
+  <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="who-title">
+    <span class="sheet-grip" aria-hidden="true"></span>
+    <h2 id="who-title" data-i18n="w_who_title">Who’s here</h2>
+    <ul id="who-list" class="who-list"></ul>
+    <p id="who-old" class="hint" hidden data-i18n="w_who_old">The Monitor is on an older Tawny, so it can’t share who else is watching.</p>
+    <div class="sheet-actions">
+      <button id="who-rename" class="wide ghost" type="button" data-i18n="w_who_rename">Change my name</button>
+      <button id="who-close" class="wide primary" type="button" data-i18n="w_who_close">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= WHAT TO CALL YOU ======================
+     Asked once, the first time this device goes live (the Android app asks in
+     its own dialog instead), and again from "Change my name". -->
+<div id="myname" class="sheet" hidden>
+  <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="myname-title">
+    <span class="sheet-grip" aria-hidden="true"></span>
+    <h2 id="myname-title" data-i18n="w_myname_title">What should the others call you?</h2>
+    <label class="field">
+      <span data-i18n="w_myname_label">Your name</span>
+      <input id="myname-input" maxlength="24" spellcheck="false" autocomplete="nickname">
+    </label>
+    <p class="hint" id="myname-hint" data-i18n="w_myname_hint">Everyone on this camera sees it next to this device. Leave it empty to show just the device.</p>
+    <div class="sheet-actions">
+      <button id="myname-skip" class="wide ghost" type="button" data-i18n="w_myname_skip">Not now</button>
+      <button id="myname-save" class="wide primary" type="button" data-i18n="w_myname_save">Save</button>
     </div>
   </div>
 </div>

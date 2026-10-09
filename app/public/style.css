@@ -83,6 +83,10 @@
      browser build. */
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
+  /* Sideways too: a landscape phone with button navigation keeps its bar on
+     one side, and the rail's chips used to sit under it, out of reach. */
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
   /* hairline around the live-view control keys; sits on --panel */
   --ctl-line: #e6dad3;
 
@@ -644,13 +648,13 @@ button { font: inherit; color: inherit; cursor: pointer; }
      a glyph or a short word, so it fits. */
   flex-wrap: nowrap;
   gap: 0 7px;
-  padding: calc(9px + var(--safe-t)) 12px 10px;
+  padding: calc(9px + var(--safe-t)) calc(12px + var(--safe-r)) 10px calc(12px + var(--safe-l));
   overflow: hidden;              /* a long label ellipsises, never spills the edge */
   /* a light warm wash, gone well before the middle of the picture */
   background: linear-gradient(rgba(10, 8, 5, .42), transparent 74%);
   text-transform: uppercase;
-  /* nothing in the rail is tappable - never let it eat a touch meant for the
-     video (pinch-zoom lives up here too) */
+  /* nothing in the rail is tappable but the phone-count chip - never let it
+     eat a touch meant for the video (pinch-zoom lives up here too) */
   pointer-events: none;
   transition: opacity .45s ease;
 }
@@ -713,7 +717,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
    - when it is exactly one - that phone's own short name in place of a safety
    code nobody needs to keep reading. Each borrows its own accent so it does not
    read as a cream box on video. */
-#peercount, #peerlabel, #battchip {
+#peercount, #peerlabel, #battchip, #announcechip {
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -740,6 +744,20 @@ button { font: inherit; color: inherit; cursor: pointer; }
   border-color: color-mix(in srgb, var(--live) 60%, transparent);
   background: color-mix(in srgb, var(--live) 18%, transparent);
 }
+/* Monitor: viewers are announced with a sound. A bell and a word rather than
+   the bell alone, so whoever is in the room can tell the setting is on without
+   having to know the app. */
+#announcechip {
+  color: var(--glass-fg);
+  border-color: var(--glass-line);
+  background: color-mix(in srgb, #ffffff 8%, transparent);
+  letter-spacing: .04em;
+}
+#announcechip svg {
+  width: 11px; height: 11px;
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round;
+}
+#announcechip b { font-weight: 700; font-size: 10.5px; }
 #peerlabel {
   color: var(--glass-fg);
   border-color: var(--glass-line);
@@ -997,7 +1015,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   gap: 3px;
   border-top: 1px solid var(--line);
   background: var(--panel);
-  padding: 7px 6px calc(7px + var(--safe-b));
+  padding: 7px calc(6px + var(--safe-r)) calc(7px + var(--safe-b)) calc(6px + var(--safe-l));
 }
 
 .ctl {
@@ -1414,7 +1432,7 @@ body.dimmed #theme-toggle { display: none; }
 }
 
 @media (min-width: 720px) {
-  .controls { gap: 6px; padding: 9px 10px calc(9px + var(--safe-b)); }
+  .controls { gap: 6px; padding: 9px calc(10px + var(--safe-r)) calc(9px + var(--safe-b)) calc(10px + var(--safe-l)); }
   /* the taller row pushes .talk-fab up with it; keep the tray above the key */
   .chimes { bottom: calc(100px + 34px + 68px + 10px + var(--safe-b)); }
   .ctl { font-size: 13px; padding: 3px 2px 4px; }
@@ -2499,3 +2517,72 @@ body:has(#live:not([hidden])) #theme-toggle {
 }
 .wn-tips { justify-content: center; margin-top: 14px; }
 .wn-card .sheet-actions { align-self: stretch; margin-top: 18px; }
+
+/* ------------------------------------------------------------ who's here */
+
+/* Half the screen, as asked: enough to see everyone at a glance without
+   losing the picture behind it. Still grows if a long list needs it. */
+#who .sheet-card { min-height: 50vh; min-height: 50dvh; }
+/* Opened over the live view, so above its floating keys (dim, z 50). */
+#who, #myname { z-index: 55; }
+/* The one thing in the rail that takes a touch (the rail itself passes them
+   through to the video). A little extra hit area round a small chip. */
+#peercount[role="button"] { pointer-events: auto; cursor: pointer; position: relative; }
+#peercount[role="button"]::after { content: ""; position: absolute; inset: -9px -5px; }
+
+.who-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.who-row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-height: 58px;
+  padding: 8px 12px;
+  border-radius: var(--r-ctl);
+}
+.who-row.is-you { background: var(--raise); }
+.who-badge {
+  flex: none;
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 16px;
+  color: #fff;
+}
+.who-badge.is-monitor { background: var(--berry); color: var(--on-accent); }
+.who-badge.is-viewer { background: color-mix(in srgb, var(--fg) 46%, var(--panel)); }
+.who-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.who-text b {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--fg);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.who-text b.is-unnamed { font-weight: 500; font-style: italic; color: var(--dim); }
+.who-text small {
+  font-size: 13px;
+  color: var(--dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.who-you {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+}

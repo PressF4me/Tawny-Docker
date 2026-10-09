@@ -15,6 +15,15 @@ runtime — nothing is streamed and nothing is downloaded at use time.
 | `goodboy` | "Good boy" | `goodboy.ogg` | 0.8 s | `_src/goodboy - dog.mp3` |
 | `bell` | "Bell" | `bell.ogg` | 1.8 s | FM synthesis (no source file) |
 
+Not a chime: `viewer.ogg` (1.45 s) is the sound the Monitor plays when a phone
+starts watching, if its "Announce viewers" switch is on. A Viewer cannot send
+it. Made from `_src/viewer - msn online.wav` (the Windows Live Messenger
+"contact signed in" sound, cut from 51.40 s of youtu.be/DEY7NmNNVS4 with 10 ms /
+150 ms fades), loudnormed to -15 LUFS like the chimes, and encoded the same way
+(Vorbis q3, mono, 32 kHz). Unlike the chimes it is Microsoft's, not
+stock-licensed. The earlier 0.6 s version came from
+`_src/viewer - messenger message.wav`.
+
 The original recordings the first four are trimmed and normalised from are
 **not in this repository**: the Pixabay licence covers them inside the app, not
 as loose downloadable files, and `pspsps` is an internal recording. Keep them

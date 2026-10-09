@@ -1,7 +1,8 @@
 {
-  "version": "2.2.7",
+  "version": "2.2.8",
   "notes": [
-    "Adding or pairing a camera no longer fails on a page opened over plain http or in an older browser"
+    "Who's here: give yourself a name, then tap the viewer count to see everyone watching the same camera",
+    "Computers show up as Linux PC, Windows PC, Mac or Chromebook in that list, not as phones"
   ],
   "changelog": "https://github.com/PressF4me/Tawny-APK/blob/master/docs/changelog/docker.md"
 }

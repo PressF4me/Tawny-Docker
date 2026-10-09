@@ -1,6 +1,6 @@
 {
   "name": "tawny",
-  "version": "2.2.7",
+  "version": "2.2.8",
   "private": true,
   "description": "Tawny — self-hosted two-way pet monitor over WebRTC",
   "type": "module",

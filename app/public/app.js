@@ -19,6 +19,9 @@ const el = {
   live: $('#live'), remote: $('#remote'), remoteAudio: $('#remote-audio'),
   local: $('#local'), loader: $('#loader'), peerAudio: $('#peer-audio'),
   peercount: $('#peercount'), peercountN: $('#peercount b'), peerlabel: $('#peerlabel'),
+  announce: $('#announcechip'),
+  who: $('#who'), whoList: $('#who-list'), whoOld: $('#who-old'),
+  myname: $('#myname'), mynameInput: $('#myname-input'),
   rail: $('#rail'),
   battchip: $('#battchip'), battFill: $('#battchip .batt-fill'), battPct: $('#battchip .batt-pct'),
   sas: $('#sas'), sascode: $('#sas-code'), saschip: $('#sas-chip'),
@@ -446,14 +449,14 @@ function dismissSheet(node) {
   closeSheet(node);
 }
 
-for (const sheet of [el.pair, el.editor, el.rowMenu, el.scanner]) {
+for (const sheet of [el.pair, el.editor, el.rowMenu, el.scanner, el.who, el.myname]) {
   if (!sheet) continue;
   sheet.addEventListener('click', (e) => { if (e.target === sheet) dismissSheet(sheet); });
 }
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  for (const sheet of [el.rowMenu, el.editor, el.scanner, el.pair]) {
+  for (const sheet of [el.myname, el.who, el.rowMenu, el.editor, el.scanner, el.pair]) {
     if (sheet && !sheet.hidden) { e.preventDefault(); dismissSheet(sheet); return; }
   }
 });
@@ -496,6 +499,11 @@ function shortDeviceLabel(model) {
       m = (i >= 0 && seg[i + 1]) ? seg[i + 1] : '';
       m = m.replace(/\s+Build\/.*$/i, '').replace(/^wv$/i, '');
       if (!m && /Android/.test(ua)) m = 'Android';
+      // Not a phone at all: Tawny for Linux, or a browser on a computer.
+      if (!m && /CrOS/.test(ua)) m = 'Chromebook';
+      else if (!m && /Windows NT/.test(ua)) m = 'Windows PC';
+      else if (!m && /Macintosh/.test(ua)) m = 'Mac';
+      else if (!m && /Linux|X11/.test(ua)) m = 'Linux PC';
     }
   }
   if (!m) m = 'Phone';
@@ -896,7 +904,9 @@ $('#setup-handheld').addEventListener('click', () => {
 $('#wp-start').addEventListener('click', () => {
   clearInterval(wpTicker);
   wpTicker = null;
-  if (S.role === 'station' && S.local) { show(el.live); openPair(); }
+  // The Monitor went live behind this screen (stayPut), so start() skipped
+  // the name question; ask it now, over the pairing sheet, as start() would.
+  if (S.role === 'station' && S.local) { show(el.live); openPair(); maybeAskMyName(); }
   else start('station');
 });
 
@@ -2535,6 +2545,9 @@ function removePeer(id) {
   if (p.audioEl) { p.audioEl.srcObject = null; p.audioEl.remove(); }
   S.peers.delete(id);
   if (S.featured === id) unfeature(id);
+  if (S.role === 'station' && p.role === 'viewer') rosterChanged();
+  // The list came from that Monitor; without it, it is nobody's word.
+  if (S.role === 'viewer' && p.role === 'station') { S.roster = null; renderWho(); }
 
   if (S.role === 'viewer' && p.role === 'station') {
     // Lost the Monitor — clear the picture and wait for it to come back.
@@ -2637,8 +2650,18 @@ function updateStatus() {
 
 function updatePeerChip() {
   if (!el.peercount) return;
+  // The bell is for the people in the room, so it stays up whether or not
+  // anyone is watching: they can check the setting at any time, not only after
+  // the sound it promises has played.
+  if (el.announce) el.announce.hidden = !(S.role === 'station' && S.announce);
   if (S.role !== 'station') {
-    el.peercount.hidden = true;
+    // A Viewer gets the same chip, counted from the Monitor's list — the one
+    // way in to who else is watching. No list (an older Monitor), no chip.
+    const vs = (S.roster || []).filter((e) => e.role === 'viewer').length;
+    el.peercount.hidden = !(S.roster && stationPeer());
+    if (el.peercountN) el.peercountN.textContent = String(vs);
+    el.peercount.setAttribute('aria-label', window.TawnyT.t('w_who_open'));
+    el.peercount.classList.remove('is-busy');
     if (el.peerlabel) el.peerlabel.hidden = true;
     return;
   }
@@ -2655,8 +2678,9 @@ function updatePeerChip() {
   // the first-connection card and nothing else.
   if (el.peerlabel) {
     const only = n === 1 ? viewerPeers()[0] : null;
-    el.peerlabel.hidden = !(only && only.label);
-    if (only && only.label) el.peerlabel.textContent = only.label;
+    const tag = only && (only.name || only.label);
+    el.peerlabel.hidden = !tag;
+    if (tag) el.peerlabel.textContent = tag;
   }
   bumpRail();
   // Tell the native shell how many are watching and whether there is still room
@@ -2669,6 +2693,175 @@ function updatePeerChip() {
     tellNative(n > 0 ? 'watching' : 'waiting', { n, max: MAX_VIEWERS, full });
   }
 }
+
+// ------------------------------------------------------------- who's here
+//
+// Every phone on a camera can see who else is on it: the name each person gave
+// (asked once, the first time a device goes live) and the device it is on. The
+// Monitor is the only end that knows everyone — Viewers never talk to each
+// other — so it keeps the list and sends it to each Viewer whenever it
+// changes. Both directions ride the `meta` message, which every relay already
+// forwards, so no relay has to be redeployed for this and a phone on an older
+// Tawny simply never sends or shows names.
+//
+// Everything here is typed by someone else's thumb. It is cleaned on the way
+// in, capped, and only ever set as textContent.
+
+const NAME_MAX = 24;
+const ROSTER_MAX = 1 + MAX_VIEWERS;
+
+/** A person's own name: any script, but no control or direction-override characters. */
+function cleanName(v) {
+  if (typeof v !== 'string') return '';
+  return v.replace(/[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u2028-\u202E\u2060-\u206F\uFEFF]/g, '')
+    .replace(/\s+/g, ' ').trim().slice(0, NAME_MAX);
+}
+
+/** A device label, held to the same rule as the offer's `label`. */
+function cleanDevice(v) {
+  return typeof v === 'string' ? v.replace(/[^\x20-\x7E]+/g, '').trim().slice(0, 20) : '';
+}
+
+function savedMyName() {
+  try { return cleanName(localStorage.getItem('tawny.myName') || ''); } catch { return ''; }
+}
+
+function nameAsked() {
+  try { return localStorage.getItem('tawny.nameAsked') === '1'; } catch { return false; }
+}
+
+/** The Monitor's list, as one Viewer should see it: that Viewer is `you`. */
+function rosterFor(viewer) {
+  const list = [{ role: 'station', name: S.myName || '', device: S.deviceLabel || '' }];
+  for (const p of viewerPeers()) {
+    const e = { role: 'viewer', name: p.name || '', device: p.label || '' };
+    if (viewer && p.id === viewer.id) e.you = true;
+    list.push(e);
+  }
+  return list;
+}
+
+/** Monitor: the list changed — tell every Viewer, and repaint our own. */
+function rosterChanged() {
+  if (S.role !== 'station') return;
+  for (const p of viewerPeers()) sig({ type: 'meta', to: p.id, roster: rosterFor(p) }, p);
+  renderWho();
+}
+
+/** Viewer: a list from the Monitor. Anything malformed is dropped, not repaired. */
+function takeRoster(raw) {
+  if (!Array.isArray(raw)) return;
+  const list = [];
+  for (const e of raw.slice(0, ROSTER_MAX)) {
+    if (!e || typeof e !== 'object') continue;
+    if (e.role !== 'station' && e.role !== 'viewer') continue;
+    list.push({ role: e.role, name: cleanName(e.name), device: cleanDevice(e.device), you: e.you === true });
+  }
+  S.roster = list;
+  updatePeerChip();
+  renderWho();
+}
+
+/** What this device shows in the sheet, from whichever end it is. */
+function whoEntries() {
+  if (S.role === 'station') {
+    return rosterFor(null).map((e, i) => (i === 0 ? { ...e, you: true } : e));
+  }
+  return S.roster || [];
+}
+
+function renderWho() {
+  if (!el.whoList) return;
+  const T = window.TawnyT;
+  const list = whoEntries();
+  el.whoList.textContent = '';
+  for (const e of list) {
+    const li = document.createElement('li');
+    li.className = 'who-row' + (e.you ? ' is-you' : '');
+    const badge = document.createElement('span');
+    badge.className = 'who-badge ' + (e.role === 'station' ? 'is-monitor' : 'is-viewer');
+    badge.setAttribute('aria-hidden', 'true');
+    badge.textContent = (e.name || e.device || '?').trim().charAt(0).toUpperCase() || '?';
+    const text = document.createElement('span');
+    text.className = 'who-text';
+    const name = document.createElement('b');
+    name.textContent = e.name || T.t('w_who_noname');
+    if (!e.name) name.className = 'is-unnamed';
+    const sub = document.createElement('small');
+    sub.textContent = [e.role === 'station' ? T.t('w_who_monitor') : T.t('w_who_viewer'), e.device]
+      .filter(Boolean).join(' · ');
+    text.append(name, sub);
+    li.append(badge, text);
+    if (e.you) {
+      const you = document.createElement('span');
+      you.className = 'who-you';
+      you.textContent = T.t('w_who_you');
+      li.append(you);
+    }
+    el.whoList.append(li);
+  }
+  // A Viewer whose Monitor never sent a list is on a Monitor that predates it.
+  if (el.whoOld) el.whoOld.hidden = !(S.role === 'viewer' && !S.roster);
+}
+
+function openWho() {
+  renderWho();
+  openSheet(el.who);
+}
+
+/** Change this device's name, and tell whoever needs to know. */
+function setMyName(v) {
+  S.myName = cleanName(v);
+  try {
+    localStorage.setItem('tawny.myName', S.myName);
+    localStorage.setItem('tawny.nameAsked', '1');
+  } catch {}
+  tellNative('myname', { name: S.myName });
+  if (S.role === 'viewer') {
+    const sp = stationPeer();
+    if (sp) sig({ type: 'meta', to: sp.id, name: S.myName }, sp);
+  } else if (S.role === 'station') {
+    rosterChanged();
+  }
+  renderWho();
+}
+
+function openMyName() {
+  el.mynameInput.value = S.myName || '';
+  el.mynameInput.placeholder = window.TawnyT.t('w_myname_ph');
+  openSheet(el.myname);
+  el.mynameInput.focus();
+}
+
+function saveMyName() {
+  setMyName(el.mynameInput.value);
+  closeSheet(el.myname);
+}
+
+/**
+ * The first live session on this device asks for a name. The Android app has
+ * already asked in its own dialog by the time the page runs, so it never
+ * shows this there.
+ */
+function maybeAskMyName() {
+  if (S.nativeShell || S.myName || nameAsked()) return;
+  openMyName();
+}
+
+if (el.peercount) {
+  el.peercount.addEventListener('click', openWho);
+  el.peercount.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openWho(); }
+  });
+}
+$('#who-close')?.addEventListener('click', () => closeSheet(el.who));
+$('#who-rename')?.addEventListener('click', () => { closeSheet(el.who); openMyName(); });
+$('#myname-save')?.addEventListener('click', saveMyName);
+$('#myname-skip')?.addEventListener('click', () => {
+  try { localStorage.setItem('tawny.nameAsked', '1'); } catch {}
+  closeSheet(el.myname);
+});
+el.mynameInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveMyName(); });
 
 // ------------------------------------------------------------- dispatch
 
@@ -2752,9 +2945,12 @@ async function handle(m, entry) {
         const clean = m.label.replace(/[^\x20-\x7E]+/g, '').trim().slice(0, 20);
         if (clean) p.label = clean;
       }
+      // ...and, from a Tawny that asks, the name its person gave.
+      if (S.role === 'station' && typeof m.name === 'string') p.name = cleanName(m.name);
       // Which Handheld this is, for its once-per-device safety-code review.
       if (S.role === 'station' && typeof m.pid === 'string' && HEX32.test(m.pid)) p.pid = m.pid;
       await answerPeer(p, m.sdp);
+      if (S.role === 'station') rosterChanged();
       // A browser Monitor still on "Waiting for the Viewer": the Viewer is
       // here, so move on to the live view, as "Start watching now" does. It
       // used to stay put - still saying it was waiting - while the safety
@@ -2826,7 +3022,22 @@ async function handle(m, entry) {
       break;
     }
     case 'meta': {
+      // Monitor: a Viewer naming (or renaming) itself. The only `meta` a
+      // Viewer sends, and the only field of it read here.
+      if (S.role === 'station') {
+        const p = S.peers.get(m.from);
+        if (p && p.role === 'viewer' && typeof m.name === 'string') {
+          const name = cleanName(m.name);
+          if (name !== (p.name || '')) { p.name = name; rosterChanged(); updatePeerChip(); }
+        }
+        break;
+      }
       if (S.role !== 'viewer') break;
+      // Who else is on this camera, from the Monitor and only the Monitor.
+      if (m.roster !== undefined) {
+        if (S.peers.get(m.from)?.role === 'station') takeRoster(m.roster);
+        break;
+      }
       // Which way up the Monitor is holding its picture. Handled first and on
       // its own: it rides the same message as the pause flag and the pet name,
       // and either of those may `break` before the end.
@@ -3037,6 +3248,15 @@ function newPC(peer) {
       clearTimeout(peer.connectDeadline);
       peer.connectDeadline = null;
       logPath(pc);
+      // A Viewer can now see and hear the room. The native Monitor decides
+      // whether that is announced out loud (its own "Announce viewers" switch,
+      // which nothing on the Viewer's side can reach); the page only reports
+      // it, once per Viewer, so an ICE restart on the same peer does not ring
+      // a second time. A phone that re-dials arrives as a new peer and does.
+      if (S.role === 'station' && peer.role === 'viewer' && !peer.announced) {
+        peer.announced = true;
+        tellNative('viewer-on');
+      }
     } else if (st === 'failed') reconnectPeer(peer);
     updateStatus();
     updatePeerChip();
@@ -3116,6 +3336,7 @@ async function makeOffer(peer, opts) {
   // The Handheld tags its offer with a short device name for the Monitor's rail.
   if (S.role === 'viewer') {
     msg.label = S.deviceLabel || shortDeviceLabel('');
+    if (S.myName) msg.name = S.myName;
     // …and with what gets it past the pairing gate: the id this phone is known
     // by once the Monitor has let it in, plus — the first time, or after the
     // Monitor forgot it — the code the user actually scanned.
@@ -3968,6 +4189,10 @@ function cameraConstraints(wide = screenIsWide()) {
 async function start(role, opts = {}) {
   if (!S.channel) return;
   S.role = role;
+  S.roster = null;
+  // The Android app hands its saved name over in tawnyStart; everywhere else
+  // the page keeps it itself.
+  if (!S.nativeShell) S.myName = savedMyName();
   S.pending = null;
   // A Monitor is never without a live pairing code: pairingAllowed() fails
   // closed on a missing one, so a station that reached here without a code
@@ -4101,6 +4326,9 @@ async function start(role, opts = {}) {
   // The pairing sheet belongs to the live screen. A caller that stayed put is
   // already showing its own QR and would get two.
   if (role === 'station') { refreshTorchSupport(); if (!opts.stayPut) openPair(); }
+  // First time live on this device: ask what to call its person. Over the
+  // pairing sheet on a Monitor, so the answer comes before the code.
+  if (!opts.stayPut) maybeAskMyName();
 }
 
 // ---------------------------------------------------------- capture loss
@@ -4878,6 +5106,10 @@ window.tawnyStart = function (role, key, name, signalUrl, rendezvousUrl, token, 
   // app-level setting deliberately kept separate from the system one — the
   // shell passes it in and the stylesheet keys off the attribute.
   if (opts && opts.motion) applyMotion(opts.motion === 'off');
+  // The shell's "Announce viewers" switch. Shown as a bell in the Monitor's
+  // rail; the sound itself is played by the shell, not here.
+  S.announce = !!(opts && opts.announce === 'on');
+  S.myName = cleanName(opts && opts.myName);
   if (opts && opts.lang && window.TawnyT) window.TawnyT.set(opts.lang);
   S.signalUrl = signalUrl || null;              // may be null on a cloud-only pairing
   if (rendezvousUrl) S.cfg.rendezvous = rendezvousUrl;
