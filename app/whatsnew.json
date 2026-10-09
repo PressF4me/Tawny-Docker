@@ -2,6 +2,7 @@
   "version": "2.2.8",
   "notes": [
     "Who's here: give yourself a name, then tap the viewer count to see everyone watching the same camera",
+    "A camera with no name shows in your browser's language (\"tu mascota\" in Spanish), whatever language its Monitor uses",
     "Computers show up as Linux PC, Windows PC, Mac or Chromebook in that list, not as phones"
   ],
   "changelog": "https://github.com/PressF4me/Tawny-APK/blob/master/docs/changelog/docker.md"

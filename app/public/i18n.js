@@ -14,6 +14,8 @@
     en: {
       // --- theme toggle ---
       w_theme_change: 'Change theme',
+      w_default_pet: 'your pet',
+      w_default_room: 'Pet camera',
       w_theme_system: 'Theme: follow system',
       w_theme_light: 'Theme: light',
       w_theme_dark: 'Theme: dark',
@@ -169,6 +171,8 @@
       w_coach_done: 'Entendido',
       w_coach_skip: 'Omitir',
       w_ctl_chime: 'Timbre',
+      w_default_pet: 'tu mascota',
+      w_default_room: 'Cámara de mascota',
       w_ctl_light: 'Luz',
       w_ctl_my_camera: 'Mi cámara',
       w_ctl_snapshot: 'Foto',

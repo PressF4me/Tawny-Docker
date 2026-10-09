@@ -218,6 +218,23 @@ function newKey() {
  * and a secure context: Android 11's stock WebView and a Docker page served
  * over plain http on the LAN have neither, and it threw there.
  */
+/**
+ * A room's name as this device should show it. The names a device falls back
+ * to when nobody typed one ("your pet", "Pet camera") are stored and shared in
+ * whatever language that device was in, so a Spanish Viewer paired to an
+ * English Monitor read "your pet". Shown in this device's language instead;
+ * the stored name is left alone.
+ */
+const DEFAULT_PET_NAMES = ['your pet', 'tu mascota'];
+const DEFAULT_ROOM_NAMES = ['pet camera', 'cámara de mascota'];
+function shownName(name) {
+  const n = String(name || '').trim();
+  const low = n.toLowerCase();
+  if (!n || DEFAULT_ROOM_NAMES.includes(low)) return window.TawnyT.t('w_default_room');
+  if (DEFAULT_PET_NAMES.includes(low)) return window.TawnyT.t('w_default_pet');
+  return n;
+}
+
 function newId() {
   if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
   const b = new Uint8Array(16);
@@ -641,7 +658,7 @@ function renderChannels() {
     av.innerHTML = ICON.paw;
 
     const nm = document.createElement('strong');
-    nm.textContent = ch.name;
+    nm.textContent = shownName(ch.name);
 
     const cue = document.createElement('span');
     cue.className = 'ch-cue';
@@ -703,7 +720,7 @@ let menuChannel = null;
 
 function openRowMenu(ch) {
   menuChannel = ch;
-  el.rowMenuTitle.textContent = ch.name;
+  el.rowMenuTitle.textContent = shownName(ch.name);
   openSheet(el.rowMenu);
 }
 
@@ -784,7 +801,7 @@ function openRole(ch, force = false) {
     start(opposite);
     return;
   }
-  el.roleName.textContent = ch.name;
+  el.roleName.textContent = shownName(ch.name);
   note(el.roleNote, '');
   show(el.role);
 }
@@ -1192,7 +1209,7 @@ function drawQR(text, cv = el.qr) {
 
 function refreshPair() {
   const url = pairLink();
-  el.pairName.textContent = S.channel.name;
+  el.pairName.textContent = shownName(S.channel.name);
   el.pairUrl.textContent = url;
   fillRelayHint(el.pairRelay, el.pairRelayAddr);
   try {
@@ -1493,7 +1510,7 @@ function adopt(raw) {
   if (S.token) saveToken(S.token);
   setRoleFor(ch, 'viewer');
   S.pending = 'viewer';
-  el.joinName.textContent = ch.name;
+  el.joinName.textContent = shownName(ch.name);
   note(el.joinNote, lastRelayNote || '');
   show(el.join);
   return true;
@@ -3068,7 +3085,7 @@ async function handle(m, entry) {
         const list = getChannels();
         const ch = list.find((c) => c.key === S.channel.key);
         if (ch) { ch.name = petName; setChannels(list); }
-        if (el.channel) el.channel.textContent = petName;
+        if (el.channel) el.channel.textContent = shownName(petName);
       }
       if (S.nativeShell) tellNative('petname', { name: petName });
       break;
@@ -4310,8 +4327,8 @@ async function start(role, opts = {}) {
   // Rail label: just the room name the user gave. The Handheld keeps it (you may
   // have several monitors); on the Monitor's own screen CSS hides it - you named
   // the pet, you know which room you are in.
-  const room = (S.channel.name || 'Pet camera').trim().replace(/\s*monitor$/i, '');
-  el.channel.textContent = room || 'Pet camera';
+  const room = (S.channel.name || '').trim().replace(/\s*monitor$/i, '');
+  el.channel.textContent = shownName(room);
 
   // Not while the caller is showing a screen of its own — see opts.stayPut.
   // Everything below still runs, so the room is warm either way.
