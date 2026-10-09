@@ -22,6 +22,8 @@
       // --- first-call walkthrough ---
       w_coach_talk: 'Hold this to talk to your pet. Let go and the room stops hearing you.',
       w_coach_chime: 'Play a sound on the Monitor — a squeaky toy, a meow, a bell — to call them over.',
+      w_coach_who: 'Tap the little phone to see who’s watching with you, by name and phone. You can change your own name there too.',
+      w_coach_who_monitor: 'Tap the little phone to see who’s watching this camera, by name and phone.',
       w_coach_light: 'Turn on the Monitor’s light to see into a dark room.',
       w_coach_snap: 'Save a photo of what the Monitor sees right now.',
       w_coach_leave: 'Hang up here. The Monitor keeps watching, so you can look in again any time.',
@@ -161,6 +163,8 @@
       // --- first-call walkthrough ---
       w_coach_talk: 'Mantén pulsado para hablarle a tu mascota. Al soltar, la habitación deja de oírte.',
       w_coach_chime: 'Reproduce un sonido en el Monitor — un juguete, un maullido, una campana — para llamarla.',
+      w_coach_who: 'Toca el teléfono pequeño para ver quién está mirando contigo, con su nombre y su teléfono. Ahí también puedes cambiar tu nombre.',
+      w_coach_who_monitor: 'Toca el teléfono pequeño para ver quién está mirando esta cámara, con su nombre y su teléfono.',
       w_coach_light: 'Enciende la luz del Monitor para ver en una habitación oscura.',
       w_coach_snap: 'Guarda una foto de lo que ve el Monitor ahora mismo.',
       w_coach_leave: 'Cuelga aquí. El Monitor sigue vigilando, así que puedes volver a mirar cuando quieras.',

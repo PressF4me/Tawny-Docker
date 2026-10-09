@@ -1689,6 +1689,35 @@ async function playChime(slug) {
   diag(`chime ${key} (${buffer ? 'clip' : 'synth'}, ctx=${ac.state})`);
 }
 
+/**
+ * Viewer: another phone just started watching (the Monitor says so, and only
+ * when its Announce viewers switch is on). The same sound the Monitor plays.
+ * The Android app plays it itself, on the call's audio stream — from WebAudio
+ * it would land on STREAM_MUSIC, muted under the call, exactly as with chimes.
+ */
+let joinBuffer = null;
+let joinAt = 0;
+async function playJoinSound() {
+  const now = Date.now();
+  if (now - joinAt < 1500) return;          // a burst of joins is one sound
+  joinAt = now;
+  diag('join sound');
+  if (androidNative) { tellNative('join-sound'); return; }
+  try {
+    const ac = audioCtx();
+    if (ac.state !== 'running') { try { await ac.resume(); } catch {} }
+    if (!joinBuffer) {
+      const r = await fetch('sounds/viewer.ogg');
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const buf = await r.arrayBuffer();
+      joinBuffer = await new Promise((res, rej) => ac.decodeAudioData(buf, res, rej));
+    }
+    playChimeBuffer(ac, joinBuffer, 1);
+  } catch (e) {
+    diag(`join sound unavailable (${e.message || e})`);
+  }
+}
+
 function playChimeBuffer(ac, buffer, gain = 1) {
   const src = ac.createBufferSource();
   const g = ac.createGain();
@@ -3052,7 +3081,10 @@ async function handle(m, entry) {
       if (S.role !== 'viewer') break;
       // Who else is on this camera, from the Monitor and only the Monitor.
       if (m.roster !== undefined) {
-        if (S.peers.get(m.from)?.role === 'station') takeRoster(m.roster);
+        if (S.peers.get(m.from)?.role === 'station') {
+          takeRoster(m.roster);
+          if (m.joined === true) playJoinSound();
+        }
         break;
       }
       // Which way up the Monitor is holding its picture. Handled first and on
@@ -3273,6 +3305,14 @@ function newPC(peer) {
       if (S.role === 'station' && peer.role === 'viewer' && !peer.announced) {
         peer.announced = true;
         tellNative('viewer-on');
+        // ...and the phones already watching hear it too: they are the ones
+        // who most need to know someone new has joined. Only when this
+        // Monitor's switch is on, so the one setting governs every end.
+        if (S.announce) {
+          for (const o of viewerPeers()) {
+            if (o.id !== peer.id) sig({ type: 'meta', to: o.id, roster: rosterFor(o), joined: true }, o);
+          }
+        }
       }
     } else if (st === 'failed') reconnectPeer(peer);
     updateStatus();
@@ -4997,11 +5037,13 @@ const COACH_STEPS = {
   viewer: [
     ['#btn-talk', 'w_coach_talk'],
     ['#btn-chime', 'w_coach_chime'],
+    ['#peercount', 'w_coach_who'],
     ['#btn-torch', 'w_coach_light'],
     ['#btn-snap', 'w_coach_snap'],
     ['#btn-leave', 'w_coach_leave'],
   ],
   station: [
+    ['#peercount', 'w_coach_who_monitor'],
     ['#btn-dim', 'w_coach_dim'],
     ['#btn-flip', 'w_coach_flip'],
     ['#btn-stop', 'w_coach_stop'],
@@ -5059,6 +5101,8 @@ function runCoach(role, steps) {
 
   const place = () => {
     const [node, key] = steps[i];
+    // A key in the rail: wake the rail, which fades after a few quiet seconds.
+    if (el.rail?.contains(node)) bumpRail();
     const r = node.getBoundingClientRect();
     const pad = 6;
     Object.assign(ring.style, {

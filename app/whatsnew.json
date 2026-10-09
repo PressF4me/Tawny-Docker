@@ -1,9 +1,8 @@
 {
-  "version": "2.2.8",
+  "version": "2.2.9",
   "notes": [
-    "Who's here: give yourself a name, then tap the viewer count to see everyone watching the same camera",
-    "A camera with no name shows in your browser's language (\"tu mascota\" in Spanish), whatever language its Monitor uses",
-    "Computers show up as Linux PC, Windows PC, Mac or Chromebook in that list, not as phones"
+    "When the Monitor has Announce viewers on, every browser already watching hears the same sound it plays whenever someone new starts watching",
+    "The first-call tour shows where to tap to see who's here"
   ],
   "changelog": "https://github.com/PressF4me/Tawny-APK/blob/master/docs/changelog/docker.md"
 }
