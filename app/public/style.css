@@ -2586,3 +2586,117 @@ body:has(#live:not([hidden])) #theme-toggle {
   text-transform: uppercase;
   color: var(--accent-ink);
 }
+
+/* ========================= TIP IN BITCOIN =========================
+   tip.js. Calm on purpose: the app's own sheet, sky for Lightning (as on the
+   footer button), one berry check when the tip lands. */
+/* above the update board (.whatsnew, 45), which has its own Tip button */
+#tip.sheet { z-index: 46; }
+.tip-card { gap: 12px; }
+.tip-head { display: flex; align-items: center; gap: 12px; }
+.tip-head h2 { margin: 0 0 2px; }
+.tip-head .hint { margin: 0; }
+.tip-head-mark {
+  flex: none; display: grid; place-items: center; width: 42px; height: 42px;
+  border-radius: var(--r-ctl); color: var(--sky-d);
+  background: color-mix(in srgb, var(--sky) 14%, var(--panel));
+}
+.tip-head-mark svg { width: 22px; height: 22px; fill: currentColor; }
+
+.tip-amounts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-top: 12px; }
+.tip-amt {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 52px; padding: 8px 2px;
+  color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-ctl);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: background .14s ease, border-color .14s ease, transform .13s cubic-bezier(.2, .8, .3, 1);
+}
+.tip-amt:hover { background: var(--raise); }
+.tip-amt:active { transform: scale(.97); }
+.tip-amt[aria-checked="true"] {
+  border-color: var(--sky); background: color-mix(in srgb, var(--sky) 11%, var(--panel));
+  box-shadow: inset 0 0 0 1px var(--sky);
+}
+.tip-amt b { font-size: 15px; font-weight: 600; }
+.tip-amt small { font-size: 10.5px; color: var(--dim); white-space: nowrap; }
+.tip-amt:focus-visible { outline: 2px solid var(--sky); outline-offset: 2px; }
+
+.tip-other { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; }
+.tip-other > span { color: var(--dim); font-weight: 600; }
+.tip-other input {
+  flex: 1; min-width: 0; height: 46px; padding: 0 12px; font: inherit; font-size: 16px; color: var(--fg);
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-ctl); outline: none;
+}
+.tip-other input:focus { border-color: var(--sky); }
+.sheet .tip-other .wide { flex: none; width: auto; min-height: 46px; padding: 11px 16px; }
+
+.tip-qr {
+  position: relative; width: min(232px, 70vw); aspect-ratio: 1; margin: 14px auto 0; padding: 10px;
+  background: #fff; border: 1px solid var(--line); border-radius: var(--r-card);
+}
+.tip-qr-img { width: 100%; height: 100%; }
+.tip-qr-img svg { display: block; width: 100%; height: 100%; }
+.tip-qr[data-state="qr"] .tip-qr-img { animation: tip-fade .25s ease; }
+.tip-qr:not([data-state="qr"]) .tip-qr-img { visibility: hidden; }
+.tip-qr-state {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 18px; text-align: center; font-size: 13px; color: #5a5364;
+}
+.tip-qr[data-state="qr"] .tip-qr-state { display: none; }
+.tip-qr:not([data-state="loading"]) .tip-qr-state .tip-spin { display: none; }
+@keyframes tip-fade { from { opacity: 0; } }
+
+.tip-scan { margin: 10px 0 0; text-align: center; font-size: 13.5px; color: var(--fg); }
+.tip-waiting {
+  display: flex; align-items: center; justify-content: center; gap: 7px; margin: 2px 0 0;
+  font-size: 12.5px; color: var(--dim); visibility: hidden;
+}
+.tip-waiting.on { visibility: visible; }
+.tip-spin {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 2.5px solid color-mix(in srgb, var(--sky) 30%, transparent); border-top-color: var(--sky);
+  animation: tip-spin .9s linear infinite;
+}
+.tip-spin.small { width: 11px; height: 11px; border-width: 2px; }
+@keyframes tip-spin { to { transform: rotate(360deg); } }
+
+.tip-actions { margin-top: 12px; }
+.tip-actions a.wide { display: flex; align-items: center; justify-content: center; text-decoration: none; }
+.tip-actions a.wide:not(.primary) { color: var(--fg); }
+.tip-actions a[aria-disabled] { opacity: .5; pointer-events: none; }
+.tip-codeline { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.tip-code {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 12px ui-monospace, "SF Mono", Menlo, monospace; color: var(--dim);
+}
+.tip-codeline .linkbtn, .tip-close { width: auto; min-height: 40px; padding: 0 4px; }
+.tip-close { align-self: center; display: block; margin: 2px auto 0; color: var(--dim); }
+
+.tip-thanks { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 18px 0 2px; overflow: hidden; }
+.tip-thanks h2 { margin: 2px 0 6px; font-size: 22px; animation: tip-rise .35s .5s ease-out both; }
+.tip-thanks .hint { margin: 0 0 16px; max-width: 30ch; animation: tip-rise .35s .7s ease-out both; }
+.tip-thanks .sheet-actions { align-self: stretch; animation: tip-rise .35s .8s ease-out both; }
+.tip-got { margin: 0 0 6px; font-weight: 600; color: var(--fg); animation: tip-rise .35s .6s ease-out both; }
+.tip-check { width: 66px; height: 66px; margin-bottom: 8px; }
+.tip-check circle { fill: none; stroke: var(--berry); stroke-width: 2.5; stroke-dasharray: 151; stroke-dashoffset: 151; animation: tip-draw .55s ease-out forwards; }
+.tip-check path {
+  fill: none; stroke: var(--berry); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 36; stroke-dashoffset: 36; animation: tip-draw .35s .45s ease-out forwards;
+}
+@keyframes tip-draw { to { stroke-dashoffset: 0; } }
+@keyframes tip-rise { from { opacity: 0; transform: translateY(6px); } }
+.tip-hearts { position: absolute; inset: 0; pointer-events: none; }
+.tip-hearts span {
+  position: absolute; bottom: 35%; color: var(--berry); opacity: 0; font-size: calc(14px * var(--s, 1));
+  animation: tip-drift 3s ease-out forwards;
+}
+@keyframes tip-drift {
+  0% { opacity: 0; transform: translateY(0) scale(.6); }
+  20% { opacity: .5; }
+  100% { opacity: 0; transform: translateY(-120px) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tip-check circle, .tip-check path { animation: none; stroke-dashoffset: 0; }
+  .tip-thanks h2, .tip-thanks .hint, .tip-thanks .sheet-actions, .tip-got { animation: none; }
+  .tip-spin { animation-duration: 2.4s; }
+}

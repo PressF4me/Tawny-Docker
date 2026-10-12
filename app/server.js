@@ -227,6 +227,10 @@ const MIME = {
  * and https for /turn and /config.json. If none is configured, it dials nothing
  * else and the policy says so.
  */
+const TIP_CONNECT_SRC = [
+  'https://strike.me', 'https://api.coinbase.com',
+  'wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.primal.net', 'wss://relay.snort.social',
+];
 const CONNECT_SRC_TOKEN = '__TAWNY_CONNECT_SRC__';
 const CONNECT_SRC = (() => {
   const out = ["'self'"];
@@ -237,6 +241,12 @@ const CONNECT_SRC = (() => {
 
   const rv = RENDEZVOUS_URL ? bareHost(RENDEZVOUS_URL) : '';
   if (HOST_RE.test(rv)) out.push(`wss://${rv}`, `https://${rv}`);
+
+  // "Tip in Bitcoin" (public/tip.js): the tip service for the invoice, the
+  // dollar price for the amounts, and the Nostr relays its paid receipt is
+  // published to. Named one by one, never a blanket https:/wss:. Same list as
+  // Tawny Desktop's config.rs and the Android LocalWeb.kt.
+  out.push(...TIP_CONNECT_SRC);
 
   // STUN/TURN hosts, listed scheme-and-host so `stun:`/`turn:`/`turns:` match.
   //

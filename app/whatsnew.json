@@ -1,8 +1,8 @@
 {
-  "version": "2.2.9",
+  "version": "2.2.10",
   "notes": [
-    "When the Monitor has Announce viewers on, every browser already watching hears the same sound it plays whenever someone new starts watching",
-    "The first-call tour shows where to tap to see who's here"
+    "Tip in Bitcoin, redone: pick $2, $5, $10 or your own amount, then scan the code with your phone's wallet or pay on strike.me",
+    "When your tip arrives, Tawny says thank you right away"
   ],
   "changelog": "https://github.com/PressF4me/Tawny-APK/blob/master/docs/changelog/docker.md"
 }

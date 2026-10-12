@@ -275,7 +275,7 @@
         </span>
         <span class="tip-label">
           <span class="tip-base">Tip in Bitcoin</span>
-          <span class="tip-alt" aria-hidden="true">strike.me</span>
+          <span class="tip-alt" aria-hidden="true">Lightning</span>
         </span>
       </a>
     </span>
@@ -616,12 +616,65 @@
         </span>
         <span class="tip-label">
           <span class="tip-base">Tip in Bitcoin</span>
-          <span class="tip-alt" aria-hidden="true">strike.me</span>
+          <span class="tip-alt" aria-hidden="true">Lightning</span>
         </span>
       </a>
     </span>
     <div class="sheet-actions">
       <button id="wn-done" class="wide primary" type="button" data-i18n="w_whatsnew_done">Let’s go</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================= TIP IN BITCOIN =====================
+     Opened by every "Tip in Bitcoin" button (tip.js). Pick an amount, scan or
+     open the invoice; when its zap receipt shows up the sheet says thank you. -->
+<div id="tip" class="sheet" hidden>
+  <div class="sheet-card tip-card" role="dialog" aria-modal="true" aria-labelledby="tip-title">
+    <span class="sheet-grip" aria-hidden="true"></span>
+    <div id="tip-pick">
+      <div class="tip-head">
+        <span class="tip-head-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M15 1.8 5.8 13.2h5.2L9 22.2l9.2-11.4H13z"/></svg></span>
+        <div>
+          <h2 id="tip-title" data-i18n="w_tip_title">Tip in Bitcoin</h2>
+          <p class="hint" data-i18n="w_tip_sub">Over Lightning, with any wallet. Tawny stays free either way.</p>
+        </div>
+      </div>
+      <div id="tip-amounts" class="tip-amounts" role="radiogroup" data-i18n-aria="w_tip_amount" aria-label="Amount">
+        <button class="tip-amt" type="button" role="radio" data-i="0"><b>$2</b><small></small></button>
+        <button class="tip-amt" type="button" role="radio" data-i="1"><b>$5</b><small></small></button>
+        <button class="tip-amt" type="button" role="radio" data-i="2"><b>$10</b><small></small></button>
+        <button class="tip-amt" type="button" role="radio" data-i="3"><b data-i18n="w_tip_other">Other</b><small data-i18n="w_tip_any">any amount</small></button>
+      </div>
+      <form id="tip-other" class="tip-other" hidden>
+        <span id="tip-other-cur">$</span>
+        <input id="tip-other-input" inputmode="decimal" autocomplete="off" spellcheck="false" data-i18n-aria="w_tip_amount" aria-label="Amount">
+        <button class="wide" type="submit" data-i18n="w_tip_create">Create code</button>
+      </form>
+      <div id="tip-qr" class="tip-qr" data-state="loading">
+        <div id="tip-qr-img" class="tip-qr-img"></div>
+        <div class="tip-qr-state"><span class="tip-spin" aria-hidden="true"></span><span id="tip-qr-msg"></span>
+          <button id="tip-retry" class="linkbtn" type="button" hidden data-i18n="w_tip_retry">Try again</button></div>
+      </div>
+      <p class="tip-scan" data-i18n="w_tip_scan">Scan with any Bitcoin wallet on your phone</p>
+      <p id="tip-waiting" class="tip-waiting"><span class="tip-spin small" aria-hidden="true"></span><span data-i18n="w_tip_waiting">Waiting for payment…</span></p>
+      <div class="sheet-actions tip-actions">
+        <a id="tip-wallet" class="wide primary" href="#" data-i18n="w_tip_open_wallet">Open wallet</a>
+        <a class="wide" href="https://strike.me/@loustrikes" target="_blank" rel="noopener noreferrer" data-i18n="w_tip_strike">Pay on strike.me</a>
+      </div>
+      <div class="tip-codeline">
+        <span id="tip-code" class="tip-code">—</span>
+        <button id="tip-copy" class="linkbtn" type="button" data-i18n="w_tip_copy">Copy invoice</button>
+      </div>
+      <button id="tip-close" class="linkbtn tip-close" type="button" data-i18n="w_tip_close">Not now</button>
+    </div>
+    <div id="tip-thanks" class="tip-thanks" hidden>
+      <div id="tip-hearts" class="tip-hearts" aria-hidden="true"></div>
+      <svg class="tip-check" viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="24"/><path d="M15 27 l7 7 l15 -16"/></svg>
+      <h2 data-i18n="w_tip_thanks">Thank you!</h2>
+      <p id="tip-got" class="tip-got"></p>
+      <p class="hint" data-i18n="w_tip_thanks_body">You’re making Tawny better for everyone.</p>
+      <div class="sheet-actions"><button id="tip-done" class="wide primary" type="button" data-i18n="w_tip_done">Done</button></div>
     </div>
   </div>
 </div>

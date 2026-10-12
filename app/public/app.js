@@ -5,6 +5,7 @@
 // or join channels, and a channel cannot be guessed by name.
 
 import qrcode from './vendor/qrcode.mjs';
+import { setupTip, closeTip } from './tip.js';
 
 const $ = (s) => document.querySelector(s);
 const CHANNELS = 'tawny.channels.v1';
@@ -41,6 +42,7 @@ const el = {
   editorHint: $('#editor-hint'),
   rowMenu: $('#row-menu'), rowMenuTitle: $('#row-menu-title'),
   whatsnew: $('#whatsnew'),
+  tip: $('#tip'),
   scanner: $('#scanner'), scanVideo: $('#scan-video'), scanHint: $('#scan-hint'),
   welcome: $('#welcome'), setupRole: $('#setup-role'), setupNote: $('#setup-note'),
   watchPair: $('#watch-pair'), wpQr: $('#wp-qr'), wpStatus: $('#wp-status'),
@@ -463,17 +465,18 @@ function dismissSheet(node) {
   if (node === el.pair) { closePair(); return; }
   if (node === el.editor) { closeSheet(node); S.editing = null; return; }
   if (node === el.rowMenu) { closeRowMenu(); return; }
+  if (node === el.tip) { closeTip(); return; }
   closeSheet(node);
 }
 
-for (const sheet of [el.pair, el.editor, el.rowMenu, el.scanner, el.who, el.myname]) {
+for (const sheet of [el.pair, el.editor, el.rowMenu, el.scanner, el.who, el.myname, el.tip]) {
   if (!sheet) continue;
   sheet.addEventListener('click', (e) => { if (e.target === sheet) dismissSheet(sheet); });
 }
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  for (const sheet of [el.myname, el.who, el.rowMenu, el.editor, el.scanner, el.pair]) {
+  for (const sheet of [el.tip, el.myname, el.who, el.rowMenu, el.editor, el.scanner, el.pair]) {
     if (sheet && !sheet.hidden) { e.preventDefault(); dismissSheet(sheet); return; }
   }
 });
@@ -5352,6 +5355,7 @@ function showWhatsNew(r) {
 }
 
 $('#wn-done').addEventListener('click', () => closeSheet(el.whatsnew));
+setupTip(openSheet, closeSheet);
 
 /** One burst of paper across the whole window, then the canvas goes idle. */
 function confetti(canvas) {

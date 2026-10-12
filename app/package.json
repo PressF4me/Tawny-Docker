@@ -1,11 +1,17 @@
 {
   "name": "tawny",
-  "version": "2.2.9",
+  "version": "2.2.10",
   "private": true,
   "description": "Tawny — self-hosted two-way pet monitor over WebRTC",
   "type": "module",
   "main": "server.js",
-  "scripts": { "start": "node server.js" },
-  "engines": { "node": ">=18" },
-  "dependencies": { "ws": "^8.18.0" }
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
 }
