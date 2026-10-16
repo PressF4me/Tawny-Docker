@@ -191,9 +191,20 @@ async function copyText(text) {
   }
 }
 
+/** Say something to a screen reader. Cleared first, so the same words twice
+ *  ("Copied", then "Copied") are read twice. */
+function announce(msg) {
+  const a = document.getElementById('announcer');
+  if (!a) return;
+  a.textContent = '';
+  clearTimeout(announce._t);
+  announce._t = setTimeout(() => { a.textContent = msg; }, 60);
+}
+
 function toast(msg) {
   const t = document.getElementById('toast');
   if (!t) return;
+  announce(msg);
   t.textContent = msg;
   t.hidden = false;
   clearTimeout(toast._t);
@@ -1720,6 +1731,13 @@ function render(data) {
   renderProgress(defs);
   if (privOn) renderPrivacyVerdict(data, defs);
   else renderVerdict(data, defs);
+  // The page rechecks every few seconds; only a verdict that actually moved is
+  // worth reading out.
+  const said = document.getElementById('verdict-title').textContent;
+  if (said !== render._said) {
+    if (render._said !== undefined) announce(said);
+    render._said = said;
+  }
   renderPrivacy(data, false);
 
   const fresh = document.getElementById('join-key');

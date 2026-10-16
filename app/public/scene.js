@@ -13,6 +13,11 @@
  * follows data-motion="off" on <html> the way the stylesheet does, and holds a
  * still pose rather than freezing mid-gesture. Tap a pet and it does its
  * thing: the cat pounces, the dog play-bows, the owlet flies a loop.
+ *
+ * data-cast="owlet" draws Tawny the owlet on her own, framed close (the
+ * Support sheet perches her on the tip QR); a tap makes her flutter.
+ * window.tawnyScene.celebrate(canvas) sets all three off together, a beat
+ * apart — the Support sheet's thank-you.
  */
 (() => {
   'use strict';
@@ -22,7 +27,14 @@
   // her ear tufts reach 22 above that, which a canvas cut off at y=0.
   const HEAD = 18;
   const PI = Math.PI, TWO_PI = PI * 2;
-  const REACT_MS = [0, 1300, 1500, 2700];   // idx = who: 1 cat, 2 dog, 3 owlet
+  const REACT_MS = [0, 1300, 1500, 2700, 1400];   // idx = who: 1 cat, 2 dog, 3 owlet, 4 owlet flutter (solo)
+  const PARTY_AT = [0, 0, 260, 520];               // celebrate(): when each joins in, ms
+  const PARTY_MS = 520 + 2700;
+  // What each cast frames, in scene units: the whole trio, or the owlet close up.
+  const VIEWS = {
+    trio:  { x: 0,  y: -HEAD, w: VW, h: VH + HEAD },
+    owlet: { x: 94, y: 94,    w: 72, h: 64 },
+  };
 
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
   const ramp = (x) => { const u = clamp(x, 0, 1); return u * u * (3 - 2 * u); };
@@ -48,6 +60,9 @@
       this.born = performance.now();
       this.reactWho = 0;
       this.reactStart = 0;
+      this.party = 0;
+      this.flutters = 1;
+      this.cast = VIEWS[canvas.dataset.cast] ? canvas.dataset.cast : 'trio';
       this.raf = 0;
       this.readColours();
       canvas.addEventListener('pointerdown', (e) => this.tap(e));
@@ -62,10 +77,15 @@
     get t() { return this.still ? 0 : ((performance.now() - this.born) % LOOP_MS) / LOOP_MS; }
 
     reactP(who) {
+      if (this.party) {
+        const p = (performance.now() - this.party - PARTY_AT[who]) / REACT_MS[who];
+        return p <= 0 ? 0 : clamp(p, 0, 1);
+      }
       if (this.reactWho !== who) return 0;
-      return clamp((performance.now() - this.reactStart) / REACT_MS[who], 0, 1);
+      const span = REACT_MS[who] * (who === 4 ? this.flutters : 1);
+      return clamp((performance.now() - this.reactStart) / span, 0, 1);
     }
-    reactSecs() { return (performance.now() - this.reactStart) / 1000; }
+    reactSecs() { return (performance.now() - (this.party || this.reactStart)) / 1000; }
 
     // ------------------------------------------------------ organic motion
 
@@ -315,7 +335,20 @@
 
     // ------------------------------------------------------------ the scene
 
+    /** The owlet alone, close up: idle hops, a flutter when tapped. */
+    drawSolo() {
+      const t = this.t, g = 150;
+      const fp = this.reactP(4);
+      // One hop per flutter asked for, each a little higher than the last.
+      const n = this.flutters, k = Math.min(Math.floor(fp * n), n - 1);
+      const flutter = fp > 0 && fp < 1
+        ? hump(fp * n - k) * (8 + 3 * k) * (0.7 + 0.3 * Math.abs(Math.sin(this.reactSecs() * 22))) : 0;
+      const idle = this.still ? 0 : (0.5 + 0.5 * Math.sin(t * TWO_PI)) * 2;
+      this.owlet(130, g - 2, t, { hop: Math.max(idle, flutter) });
+    }
+
     draw() {
+      if (this.cast === 'owlet') { this.drawSolo(); return; }
       const c = this.cx, k = this.col;
       const t = this.t, tau = t * TWO_PI, g = 150, bob = Math.sin(tau);
 
@@ -455,6 +488,7 @@
     // ------------------------------------------------------------ frame loop
 
     critterAt(sx, sy) {
+      if (this.cast === 'owlet') return 4;
       if (sx >= 108 && sx <= 152 && sy >= 88 && sy <= 156) return 3;
       if (sx >= 28 && sx <= 114 && sy >= 56 && sy <= 158) return 1;
       if (sx >= 146 && sx <= 244 && sy >= 50 && sy <= 158) return 2;
@@ -463,12 +497,14 @@
 
     tap(e) {
       const r = this.cv.getBoundingClientRect();
-      const s = Math.min(r.width / VW, r.height / (VH + HEAD));
-      const sx = (e.clientX - r.left - (r.width - VW * s) / 2) / s;
-      const sy = (e.clientY - r.top - (r.height - (VH + HEAD) * s) / 2) / s - HEAD;
+      const v = VIEWS[this.cast];
+      const s = Math.min(r.width / v.w, r.height / v.h);
+      const sx = (e.clientX - r.left - (r.width - v.w * s) / 2) / s + v.x;
+      const sy = (e.clientY - r.top - (r.height - v.h * s) / 2) / s + v.y;
       const who = this.critterAt(sx, sy);
       if (!who) return;
       this.reactWho = who;
+      this.flutters = 1;
       this.reactStart = performance.now();
       try { navigator.vibrate?.(8); } catch {}
       this.start();
@@ -484,13 +520,15 @@
       const c = this.cx;
       c.setTransform(1, 0, 0, 1, 0, 0);
       c.clearRect(0, 0, w, h);
-      const s = Math.min(w / VW, h / (VH + HEAD));
-      c.translate((w - VW * s) / 2, (h - (VH + HEAD) * s) / 2 + HEAD * s);
+      const v = VIEWS[this.cast];
+      const s = Math.min(w / v.w, h / v.h);
+      c.translate((w - v.w * s) / 2 - v.x * s, (h - v.h * s) / 2 - v.y * s);
       c.scale(s, s);
       this.draw();
-      if (this.reactWho && performance.now() - this.reactStart >= REACT_MS[this.reactWho]) this.reactWho = 0;
+      if (this.reactWho && performance.now() - this.reactStart >= REACT_MS[this.reactWho] * (this.reactWho === 4 ? this.flutters : 1)) this.reactWho = 0;
+      if (this.party && performance.now() - this.party >= PARTY_MS) this.party = 0;
       // Still and not reacting: one frame is the whole picture.
-      if (!this.still || this.reactWho) this.start();
+      if (!this.still || this.reactWho || this.party) this.start();
     }
 
     start() { if (!this.raf) this.raf = requestAnimationFrame(() => this.frame()); }
@@ -514,6 +552,26 @@
     { attributes: true, attributeFilter: ['data-theme', 'data-motion'] });
   try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', repaint); } catch {}
   window.addEventListener('resize', () => { for (const s of scenes) s.start(); });
+  window.tawnyScene = {
+    /** The solo owlet hops `times` times — the Support sheet's answer to an amount. */
+    flutter(canvas, times = 1) {
+      const sc = canvas && canvas.__scene;
+      if (!sc || sc.still || sc.cast !== 'owlet') return;
+      sc.party = 0;
+      sc.reactWho = 4;
+      sc.flutters = Math.max(1, Math.min(4, times | 0));
+      sc.reactStart = performance.now();
+      sc.start();
+    },
+    /** All three react together, a beat apart. Still under data-motion="off". */
+    celebrate(canvas) {
+      const sc = canvas && canvas.__scene;
+      if (!sc || sc.still) return;
+      sc.reactWho = 0;
+      sc.party = performance.now();
+      sc.start();
+    },
+  };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount);
   else mount();
 })();

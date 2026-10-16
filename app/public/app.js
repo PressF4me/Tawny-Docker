@@ -5,7 +5,7 @@
 // or join channels, and a channel cannot be guessed by name.
 
 import qrcode from './vendor/qrcode.mjs';
-import { setupTip, closeTip } from './tip.js';
+import { setupTip, closeTip, openSupport, setTipMode } from './tip.js';
 
 const $ = (s) => document.querySelector(s);
 const CHANNELS = 'tawny.channels.v1';
@@ -32,7 +32,8 @@ const el = {
   stageNoteBody: $('#stage-note-body'),
   dot: $('#dot'), statusline: $('#statusline'), channel: $('#channel'),
   meter: $('#meter'), dimMeter: $('#dim-meter'), dimmer: $('#dimmer'),
-  talkflag: $('#talkflag'), chimes: $('#chimes'), toast: $('#toast'),
+  talkflag: $('#talkflag'), chimes: $('#chimes'), toast: $('#toast'), announcer: $('#announcer'),
+  delConfirm: $('#del-confirm'), dimWake: $('#dim-wake'),
   cViewer: $('#controls-viewer'), cStation: $('#controls-station'),
   pair: $('#pair'), pairName: $('#pair-name'), qr: $('#qr'),
   pairProfile: $('#pair-profile'), pairCustomWrap: $('#pair-custom-wrap'),
@@ -138,9 +139,7 @@ const expiredMessage = () => TawnyT.t('w_msg_expired');
 // page's own origin, or one of the two rendezvous addresses it was configured
 // with. Anything else is dropped rather than obeyed, and this is what the user
 // is told, because the pairing will otherwise fail with no explanation at all.
-const RELAY_MISMATCH_MESSAGE =
-  'That link names a server this app is not set up for, so it was ignored. If '
-  + 'the phones cannot find each other, set the same server address on both.';
+const relayMismatchMessage = () => TawnyT.t('w_pair_relay_mismatch');
 
 // Candidates buffered before setRemoteDescription. A real negotiation sends a
 // couple of dozen; anything past this is a peer filling memory.
@@ -283,7 +282,17 @@ async function roomIdFor(key) {
 
 // --------------------------------------------------------------- helpers
 
+/** Say something to a screen reader. Cleared first, so the same words twice
+ *  are read twice. */
+function announce(msg) {
+  if (!el.announcer) return;
+  el.announcer.textContent = '';
+  clearTimeout(announce._t);
+  announce._t = setTimeout(() => { el.announcer.textContent = msg; }, 60);
+}
+
 function toast(msg, ms = 2600) {
+  announce(msg);
   el.toast.textContent = msg;
   el.toast.hidden = false;
   clearTimeout(toast._t);
@@ -435,10 +444,66 @@ window.addEventListener('resize', () => {
 
 const SHEET_MS = 300;
 
+// Where a script moves focus, the ring follows the last input: shown after a
+// key, never after a tap. Chrome otherwise carries a ring over from whatever
+// was focused before, which on a phone means a bright outline on a screen
+// that was just touched — or on the dimmed black one.
+let keyboardLast = false;
+addEventListener('keydown', (e) => { if (!e.isComposing) keyboardLast = true; }, true);
+addEventListener('pointerdown', () => { keyboardLast = false; }, true);
+function moveFocus(node) {
+  if (!node) return;
+  try { node.focus({ preventScroll: true, focusVisible: keyboardLast }); }
+  catch { node.focus(); }
+}
+
+// Focus goes into a sheet when it opens, stays inside while it is up, and
+// returns to whatever opened it. A sheet opened from inside another sheet
+// (Rename, from the row menu) hands back to the first sheet's opener, since
+// the button that opened it is about to disappear.
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
+
+function sheetFocusables(node) {
+  return [...node.querySelectorAll(FOCUSABLE)].filter((n) => !n.closest('[hidden]'));
+}
+
+function topSheet() {
+  let top = null;
+  for (const n of document.querySelectorAll('.sheet:not([hidden])')) {
+    if (n.classList.contains('is-closing')) continue;
+    if (!top || (+getComputedStyle(n).zIndex || 0) >= (+getComputedStyle(top).zIndex || 0)) top = n;
+  }
+  return top;
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Tab') return;
+  const sheet = topSheet();
+  if (!sheet) return;
+  const list = sheetFocusables(sheet);
+  if (!list.length) return;
+  const first = list[0], last = list[list.length - 1];
+  const inside = sheet.contains(document.activeElement);
+  if (e.shiftKey && (!inside || document.activeElement === first)) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && (!inside || document.activeElement === last)) { e.preventDefault(); first.focus(); }
+});
+
 function openSheet(node) {
   if (!node) return;
   clearTimeout(node._sheetT);
+  node.classList.remove('is-closing');
+  if (node.hidden) {
+    let opener = document.activeElement;
+    const host = opener?.closest?.('.sheet');
+    if (host && host !== node) opener = host._opener || null;
+    node._opener = opener && opener !== document.body ? opener : null;
+  }
   node.hidden = false;
+  const card = node.querySelector('.sheet-card');
+  if (card && !card.contains(document.activeElement)) {
+    card.tabIndex = -1;
+    moveFocus(card);
+  }
   if (motionOff()) { node.classList.add('is-open'); return; }
   // One frame at the resting transform, so the transition has somewhere to
   // come from — adding the class in the same tick as `hidden = false` skips it.
@@ -450,8 +515,15 @@ function closeSheet(node) {
   if (!node || node.hidden) { node?.classList.remove('is-open'); return; }
   clearTimeout(node._sheetT);
   node.classList.remove('is-open');
-  if (motionOff()) { node.hidden = true; return; }
-  node._sheetT = setTimeout(() => { node.hidden = true; }, SHEET_MS);
+  node.classList.add('is-closing');
+  const opener = node._opener;
+  node._opener = null;
+  if (node.contains(document.activeElement) || document.activeElement === document.body) {
+    if (opener?.isConnected && !opener.closest('[hidden]')) moveFocus(opener);
+    else document.activeElement?.blur?.();
+  }
+  if (motionOff()) { node.hidden = true; node.classList.remove('is-closing'); return; }
+  node._sheetT = setTimeout(() => { node.hidden = true; node.classList.remove('is-closing'); }, SHEET_MS);
 }
 
 /**
@@ -466,22 +538,24 @@ function dismissSheet(node) {
   if (node === el.editor) { closeSheet(node); S.editing = null; return; }
   if (node === el.rowMenu) { closeRowMenu(); return; }
   if (node === el.tip) { closeTip(); return; }
+  if (node === el.delConfirm) { closeDelete(); return; }
   closeSheet(node);
 }
 
-for (const sheet of [el.pair, el.editor, el.rowMenu, el.scanner, el.who, el.myname, el.tip]) {
+for (const sheet of [el.pair, el.editor, el.rowMenu, el.scanner, el.who, el.myname, el.tip, el.delConfirm]) {
   if (!sheet) continue;
   sheet.addEventListener('click', (e) => { if (e.target === sheet) dismissSheet(sheet); });
 }
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  for (const sheet of [el.tip, el.myname, el.who, el.rowMenu, el.editor, el.scanner, el.pair]) {
+  for (const sheet of [el.delConfirm, el.tip, el.myname, el.who, el.rowMenu, el.editor, el.scanner, el.pair]) {
     if (sheet && !sheet.hidden) { e.preventDefault(); dismissSheet(sheet); return; }
   }
 });
 
 function status(text, kind) {
+  if (text !== el.statusline.textContent) announce(text);
   el.statusline.textContent = text;
   el.dot.className = 'dot' + (kind ? ' ' + kind : '');
   // A nominal state (live, or a connection still coming up) collapses to just
@@ -666,13 +740,13 @@ function renderChannels() {
     const cue = document.createElement('span');
     cue.className = 'ch-cue';
     const remembered = roleFor(ch);
-    cue.textContent = remembered === 'station' ? 'Resume as Monitor'
-      : remembered === 'viewer' ? 'Resume as Viewer'
-      : 'Choose Monitor or Viewer';
+    cue.textContent = TawnyT.t(remembered === 'station' ? 'w_ch_cue_monitor'
+      : remembered === 'viewer' ? 'w_ch_cue_viewer'
+      : 'w_ch_cue_choose');
 
     const fp = document.createElement('span');
     fp.className = 'ch-fp';
-    fp.textContent = `key ${ch.key.slice(0, 6)}…`;
+    fp.textContent = TawnyT.t('w_ch_key', ch.key.slice(0, 6));
 
     const chev = document.createElement('span');
     chev.className = 'ch-chev';
@@ -685,8 +759,8 @@ function renderChannels() {
     const more = document.createElement('button');
     more.type = 'button';
     more.className = 'ch-more';
-    more.title = `Options for ${ch.name}`;
-    more.setAttribute('aria-label', `Options for ${ch.name}`);
+    more.title = TawnyT.t('w_ch_options', shownName(ch.name));
+    more.setAttribute('aria-label', more.title);
     more.innerHTML = ICON.more;
     more.addEventListener('click', () => openRowMenu(ch));
 
@@ -714,7 +788,7 @@ function deleteChannel(ch) {
     localStorage.removeItem(`tawny.role.${ch.id}`);
   } catch {}
   renderChannels();
-  toast('Monitor removed');
+  toast(TawnyT.t('w_del_done'));
 }
 
 // The channel row's overflow sheet. One channel at a time; the buttons are
@@ -740,35 +814,52 @@ $('#row-switch-role')?.addEventListener('click', () => {
   closeRowMenu();
   if (ch) openRole(ch, true);
 });
+// Deleting asks first, in a sheet of its own rather than the browser's
+// confirm() box, which looks like nothing else in Tawny.
+let deleting = null;
+
 $('#row-delete').addEventListener('click', () => {
   const ch = menuChannel;
   closeRowMenu();
   if (!ch) return;
-  if (!confirm(`Delete "${ch.name}"? Devices paired to it will stop connecting.`)) return;
+  deleting = ch;
+  $('#del-title').textContent = TawnyT.t('w_del_title', shownName(ch.name));
+  openSheet(el.delConfirm);
+  moveFocus($('#del-cancel'));
+});
+
+function closeDelete() { closeSheet(el.delConfirm); deleting = null; }
+
+$('#del-cancel').addEventListener('click', closeDelete);
+$('#del-go').addEventListener('click', () => {
+  const ch = deleting;
+  closeDelete();
+  if (!ch) return;
   deleteChannel(ch);
+  // The row (and its ⋯ button, where focus just went back to) is gone.
+  if (!document.activeElement || document.activeElement === document.body
+      || !document.activeElement.isConnected) moveFocus($('#ch-add'));
 });
 
 function openEditor(ch) {
   S.editing = ch || null;
-  el.editorTitle.textContent = ch ? 'Rename channel' : 'New channel';
+  el.editorTitle.textContent = TawnyT.t(ch ? 'w_editor_rename' : 'w_ch_new');
   el.editorName.value = ch ? ch.name : '';
-  el.editorHint.textContent = ch
-    ? 'The key stays the same, so paired devices keep working.'
-    : 'A fresh key is generated for this channel. Only devices you pair can join it.';
+  el.editorHint.textContent = TawnyT.t(ch ? 'w_editor_hint_rename' : 'w_editor_hint_new');
   openSheet(el.editor);
   el.editorName.focus();
 }
 
 function saveEditor() {
   const name = el.editorName.value.trim();
-  if (!name) return toast('Give this monitor a name.');
+  if (!name) return toast(TawnyT.t('w_editor_need_name'));
   const list = getChannels();
   let fresh = null;
   if (S.editing) {
     const found = list.find((c) => c.id === S.editing.id);
     if (found) found.name = name;
   } else {
-    if (list.length >= 12) return toast('That is as many monitors as Tawny keeps.');
+    if (list.length >= 12) return toast(TawnyT.t('w_editor_too_many'));
     fresh = { id: newId(), name, key: newKey() };
     list.push(fresh);
   }
@@ -785,7 +876,9 @@ function saveEditor() {
 el.chAdd.addEventListener('click', () => openEditor(null));
 $('#editor-save').addEventListener('click', saveEditor);
 $('#editor-cancel').addEventListener('click', () => { closeSheet(el.editor); S.editing = null; });
-el.editorName.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveEditor(); });
+// preventDefault: saving hands focus back to the + button while Enter is still
+// down, and the browser would then press that button with the same key.
+el.editorName.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveEditor(); } });
 
 /**
  * `force` skips the remembered role — the "Switch role" row-menu action uses
@@ -836,13 +929,12 @@ function refreshWatchPair() {
     drawQR(url, el.wpQr);
     note(el.wpWarn, '');
   } catch {
-    note(el.wpWarn, 'This address is too long to fit in a pairing code. Use a shorter hostname.');
+    note(el.wpWarn, TawnyT.t('w_pair_too_long'));
   }
   const insecure = url.startsWith('http://') &&
     !/^https?:\/\/(localhost|127\.0\.0\.1)/.test(url);
   if (insecure) {
-    note(el.wpWarn, 'This is a plain http address. The Viewer will load but the ' +
-      'browser will refuse it the microphone. Serve Tawny over https.');
+    note(el.wpWarn, TawnyT.t('w_pair_plain_http'));
   }
   fillRelayHint(el.wpRelay, el.wpRelayAddr);
 }
@@ -875,7 +967,7 @@ async function openWatchPair() {
   // the ticket in the QR has to be the same secret start() then registers as
   // hashT, or the Viewer would present a `t` the relay has never hashed.
   refreshWatchPair();
-  el.wpStatus.textContent = 'Waiting for the Viewer';
+  el.wpStatus.textContent = TawnyT.t('w_wp_waiting');
   show(el.watchPair);
   clearInterval(wpTicker);
   wpTicker = setInterval(tickWatchPair, 1000);
@@ -945,7 +1037,7 @@ el.wpCopy.addEventListener('click', async () => {
     await navigator.clipboard.writeText(pairLink());
     toast(TawnyT.t('w_toast_link_copied'));
   } catch {
-    toast('Copy failed — select the link text instead.');
+    toast(TawnyT.t('w_copy_failed_link'));
   }
 });
 // The app bar's back affordance and the quiet "Set up later" underneath it
@@ -967,8 +1059,8 @@ function getProfiles() {
 function baseCandidates() {
   const here = location.origin + location.pathname.replace(/[^/]*$/, '');
   return [
-    { id: 'origin', label: `This address — ${location.host}`, url: here },
-    { id: 'custom', label: 'Another address (domain or tailnet name)…', url: '' }
+    { id: 'origin', label: TawnyT.t('w_pair_this_address', location.host), url: here },
+    { id: 'custom', label: TawnyT.t('w_pair_other_address'), url: '' }
   ];
 }
 
@@ -1219,12 +1311,11 @@ function refreshPair() {
     drawQR(url);
     note(el.pairWarn, '');
   } catch {
-    note(el.pairWarn, 'That address is too long to fit in a pairing code. Use a shorter hostname.');
+    note(el.pairWarn, TawnyT.t('w_pair_too_long'));
   }
   const insecure = url.startsWith('http://') && !/^https?:\/\/(localhost|127\.0\.0\.1)/.test(url);
   if (insecure) {
-    note(el.pairWarn, 'This is a plain http address. The handset will load but browsers ' +
-      'will refuse it the microphone. Use an https address instead.');
+    note(el.pairWarn, TawnyT.t('w_pair_plain_http'));
   }
 }
 
@@ -1240,9 +1331,8 @@ function tickPairSheet() {
     return;
   }
   const s = Math.ceil(pairCodeLeft() / 1000);
-  el.pairExpiry.textContent =
-    `This code works for another ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}. `
-    + 'A fresh one appears here when it runs out.';
+  el.pairExpiry.textContent = TawnyT.t('w_pair_expiry',
+    `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
 }
 
 function openPair() {
@@ -1285,9 +1375,9 @@ async function copyRelay() {
   if (!addr) return;
   try {
     await navigator.clipboard.writeText(addr);
-    toast('Server address copied.');
+    toast(TawnyT.t('w_relay_copied'));
   } catch {
-    toast('Copy failed — select the address instead.');
+    toast(TawnyT.t('w_copy_failed_address'));
   }
 }
 for (const id of ['#wp-relay-copy', '#pair-relay-copy']) {
@@ -1300,7 +1390,7 @@ $('#pair-copy').addEventListener('click', async () => {
     await navigator.clipboard.writeText(pairLink());
     toast(TawnyT.t('w_toast_link_copied'));
   } catch {
-    toast('Copy failed — select the link text instead.');
+    toast(TawnyT.t('w_copy_failed_link'));
   }
 });
 
@@ -1336,7 +1426,7 @@ async function openScanner() {
   const take = (raw) => {
     if (!raw) return false;
     if (adopt(raw)) { S.scanStop(); return true; }
-    el.scanHint.textContent = lastPairError || 'That code is not a Tawny pairing code.';
+    el.scanHint.textContent = lastPairError || TawnyT.t('w_scan_not_tawny');
     return false;
   };
 
@@ -1378,10 +1468,10 @@ async function openScanner() {
 
 // Manual escape hatch — camera denied, or a link someone sent by message.
 function promptPasteLink() {
-  const link = prompt('Paste the pairing link shown on the monitor:');
+  const link = prompt(TawnyT.t('w_paste_prompt'));
   if (link == null) return;
   if (!adopt(link.trim())) {
-    toast(lastPairError || 'That was not a Tawny pairing link.');
+    toast(lastPairError || TawnyT.t('w_paste_bad'));
   }
 }
 
@@ -1496,7 +1586,7 @@ function adopt(raw) {
       ok = (r.protocol === 'https:' || r.protocol === 'wss:') && allowed.includes(r.host);
       if (ok) S.linkRelay = wsBase(r.origin);
     } catch {}
-    if (!ok) lastRelayNote = RELAY_MISMATCH_MESSAGE;
+    if (!ok) lastRelayNote = relayMismatchMessage();
   }
 
   const list = getChannels();
@@ -2718,8 +2808,8 @@ function updatePeerChip() {
   const full = n >= MAX_VIEWERS;
   el.peercount.hidden = n === 0;
   if (el.peercountN) el.peercountN.textContent = String(n);
-  el.peercount.setAttribute('aria-label',
-    `${n} phone${n === 1 ? '' : 's'} watching${full ? ', full' : ''}`);
+  el.peercount.setAttribute('aria-label', TawnyT.t(full ? 'w_aria_watching_full'
+    : n === 1 ? 'w_aria_watching_one' : 'w_aria_watching_many', n));
   el.peercount.classList.toggle('is-busy', full);
 
   // Exactly one phone watching: name it. More than one, or none: no room for a
@@ -2899,9 +2989,6 @@ function maybeAskMyName() {
 
 if (el.peercount) {
   el.peercount.addEventListener('click', openWho);
-  el.peercount.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openWho(); }
-  });
 }
 $('#who-close')?.addEventListener('click', () => closeSheet(el.who));
 $('#who-rename')?.addEventListener('click', () => { closeSheet(el.who); openMyName(); });
@@ -2910,7 +2997,7 @@ $('#myname-skip')?.addEventListener('click', () => {
   try { localStorage.setItem('tawny.nameAsked', '1'); } catch {}
   closeSheet(el.myname);
 });
-el.mynameInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveMyName(); });
+el.mynameInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveMyName(); } });
 
 // ------------------------------------------------------------- dispatch
 
@@ -3684,7 +3771,7 @@ function updateBatteryUI() {
   el.battchip.classList.toggle('is-charging', charging === true);
   el.battchip.classList.toggle('is-low', charging !== true && level <= 15);
   el.battchip.setAttribute('aria-label',
-    `Monitor battery ${level}%${charging === true ? ', charging' : ''}`);
+    TawnyT.t(charging === true ? 'w_aria_battery_charging' : 'w_aria_battery', level));
   bumpRail();
 }
 
@@ -4874,6 +4961,8 @@ async function setDim(on) {
   S.dimmed = on;
   el.dimmer.hidden = !on;
   document.body.classList.toggle('dimmed', on);
+  if (on) moveFocus(el.dimWake);
+  else if (el.dimmer.contains(document.activeElement)) moveFocus($('#btn-dim'));
   try { androidNative?.setDimmed?.(on); } catch {}
 
   // The self-preview is a second, full-rate video sink for a stream this phone
@@ -5152,6 +5241,25 @@ function runCoach(role, steps) {
 // Native-shell entry point. The Android app runs its own welcome / role /
 // pairing screens, then loads this page with #native and calls this to drop
 // straight into a live session. No-op in a plain browser.
+/**
+ * The Android app's "Support Tawny" screen: a WebView of its own over this
+ * page, showing only the Support sheet, full screen. Same opts as
+ * tawnyStart for theme, motion and language, plus how tips work there:
+ * "native" — invoices and receipts come through window.TawnySupport (TipZap),
+ * the page's CSP staying as narrow as the live view's; "handoff" — the Play
+ * build: the address, Open wallet and strike.me, no amounts, no invoice.
+ */
+window.tawnySupport = function (opts = {}) {
+  S.nativeShell = true;
+  document.documentElement.classList.add('support-shell');
+  if (opts.systemTheme === 'light' || opts.systemTheme === 'dark') shellSystemTheme = opts.systemTheme;
+  if (opts.theme) applyTheme(THEME_ORDER.includes(opts.theme) ? opts.theme : 'system');
+  if (opts.motion) applyMotion(opts.motion === 'off');
+  if (opts.lang && window.TawnyT) window.TawnyT.set(opts.lang);
+  setTipMode(opts.tip === 'handoff' ? 'handoff' : opts.tip === 'native' ? 'native' : 'web');
+  openSupport();
+};
+
 window.tawnyStart = function (role, key, name, signalUrl, rendezvousUrl, token, opts) {
   if (!key || !/^[A-Za-z0-9_-]{16,64}$/.test(key)) return false;
   S.nativeShell = true;
@@ -5300,7 +5408,7 @@ window.tawnyPairCode = function (code, expMs) {
     // Clear the key out of the address bar before anything else can see it.
     history.replaceState(null, '', location.pathname + location.search);
     if (adopt(raw)) landed = true;            // adopt() shows the join screen
-    else note(el.chNote, lastPairError || 'That pairing link was not valid.');
+    else note(el.chNote, lastPairError || TawnyT.t('w_link_bad'));
   }
 
   if (!landed) {
@@ -5355,7 +5463,7 @@ function showWhatsNew(r) {
 }
 
 $('#wn-done').addEventListener('click', () => closeSheet(el.whatsnew));
-setupTip(openSheet, closeSheet);
+setupTip(openSheet, closeSheet, toast);
 
 /** One burst of paper across the whole window, then the canvas goes idle. */
 function confetti(canvas) {

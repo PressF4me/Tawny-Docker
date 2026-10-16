@@ -31,7 +31,7 @@
     <div class="wrap setup-wrap">
 
       <div id="verdict" class="verdict">
-        <span id="verdict-icon" class="verdict-icon"></span>
+        <span id="verdict-icon" class="verdict-icon" aria-hidden="true"></span>
         <div class="verdict-text">
           <h2 id="verdict-title">Checking…</h2>
           <p id="verdict-say">Reading the container's own state.</p>
@@ -75,7 +75,9 @@
   </div>
 </main>
 
-<div id="toast" class="toast" hidden></div>
+<div id="toast" class="toast" hidden aria-hidden="true"></div>
+<!-- Screen-reader copy of the toast and of the verdict when it changes. -->
+<div id="announcer" class="sr-only" role="status" aria-live="polite"></div>
 
 <script src="setup.js"></script>
 </body>

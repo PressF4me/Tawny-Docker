@@ -178,6 +178,115 @@
       w_tip_got_sats: 'Your tip arrived · {0}',
       w_tip_thanks_body: 'You’re making Tawny better for everyone.',
       w_tip_done: 'Done',
+      // --- screens before the call (welcome, setup, channels, sheets) ---
+      w_doc_title: 'Tawny — Pet Monitor',
+      w_pet_monitor: 'Pet Monitor',
+      w_back: 'Back',
+      w_back_channels: 'Back to channels',
+      w_cancel: 'Cancel',
+      w_save: 'Save',
+      w_done: 'Done',
+      w_not_now: 'Not now',
+      w_welcome_lede: 'Keep an eye on your pet from anywhere in the house. Two phones on your Wi-Fi — no accounts, nothing to set up.',
+      w_welcome_go: 'Get started',
+      w_welcome_skip: 'I’ve set this up before',
+      w_setup_title: 'This device',
+      w_setup_sub: 'Which job is it doing?',
+      w_role_monitor: 'The Monitor',
+      w_role_viewer: 'The Viewer',
+      w_setup_monitor_line: 'Stays with your pet',
+      w_setup_monitor_blurb: 'Plug it in and point the camera. It sends video and sound, answers on its own, and shows a code for the Viewer to scan.',
+      w_setup_viewer_line: 'Comes with you',
+      w_setup_viewer_blurb: 'See what the Monitor sees, listen in, hold to talk back, ring a chime, or save a snapshot.',
+      w_wp_sub: 'Show this to the Viewer',
+      w_wp_hint: 'On the other phone, open Tawny, choose **The Viewer**, and point its camera at this code.',
+      w_wp_share: 'Can’t scan? Send this link instead',
+      w_wp_copy: 'Copy pairing link',
+      w_relay_summary: 'Pairing with the Tawny app?',
+      w_relay_body: 'The app can’t open a web link. On that phone, open Tawny, press and hold the version number at the bottom of the first screen, then choose **Servers** and paste this into **Rendezvous**.',
+      w_relay_copy: 'Copy server address',
+      w_relay_fine: 'Both devices have to use the same server to find each other.',
+      w_wp_waiting: 'Waiting for the Viewer',
+      w_wp_start: 'Start watching now',
+      w_wp_later: 'Set up later',
+      w_ch_new: 'New channel',
+      w_ch_title: 'Channels',
+      w_ch_empty_title: 'Nothing paired yet',
+      w_ch_empty_body: 'Set up the phone that stays with your pet as The Monitor, then scan its pairing code on this one.',
+      w_ch_empty_go: 'Set this up',
+      w_ch_join_title: 'Join a Monitor',
+      w_ch_join_hint: 'Point your phone’s camera at the pairing code shown by The Monitor. It opens this page already set up.',
+      w_scan_code: 'Scan pairing code',
+      w_foot_private: 'Video and audio travel straight between your devices. The server only introduces the two phones to each other, and never gets the key that unlocks the picture.',
+      w_foot_free: 'Tawny is free and unlocks nothing for money — chipping in only helps pay the running costs.',
+      w_ch_cue_monitor: 'Resume as Monitor',
+      w_ch_cue_viewer: 'Resume as Viewer',
+      w_ch_cue_choose: 'Choose Monitor or Viewer',
+      w_ch_key: 'key {0}…',
+      w_ch_options: 'Options for {0}',
+      w_role_sub: 'Pick this device’s job',
+      w_role_monitor_line: 'Leave it with the pet',
+      w_role_monitor_blurb: 'Sends camera and microphone, answers on its own, plays chimes, and shows a pairing code for your phone.',
+      w_role_viewer_line: 'Keep it with you',
+      w_role_viewer_blurb: 'Watch and listen, hold to talk, ring a chime, save a snapshot.',
+      w_join_title: 'Pairing code accepted',
+      w_join_pre: 'You’re about to join',
+      w_join_post: 'as a Viewer.',
+      w_join_go: 'Join now',
+      w_pair_title: 'Pair a Viewer',
+      w_pair_hint: 'Point your phone’s camera at this code. It opens Tawny already joined to',
+      w_pair_profile: 'Address the Viewer will use',
+      w_pair_address: 'Address',
+      w_pair_copy: 'Copy link',
+      w_pair_expiry: 'This code works for another {0}. A fresh one appears here when it runs out.',
+      w_pair_this_address: 'This address — {0}',
+      w_pair_other_address: 'Another address (domain or tailnet name)…',
+      w_pair_too_long: 'This address is too long to fit in a pairing code. Use a shorter hostname.',
+      w_pair_plain_http: 'This is a plain http address. The Viewer will load, but the browser won’t let it use the microphone. Use an https address instead.',
+      w_pair_relay_mismatch: 'That link names a server this app isn’t set up for, so it was ignored. If the phones can’t find each other, set the same server address on both.',
+      w_copy_failed_link: 'Copy failed — select the link text instead.',
+      w_copy_failed_address: 'Copy failed — select the address instead.',
+      w_relay_copied: 'Server address copied',
+      w_editor_name: 'Name',
+      w_editor_ph: 'Living room',
+      w_editor_rename: 'Rename channel',
+      w_editor_hint_new: 'A fresh key is generated for this channel. Only devices you pair can join it.',
+      w_editor_hint_rename: 'The key stays the same, so paired devices keep working.',
+      w_editor_need_name: 'Give this channel a name.',
+      w_editor_too_many: 'Tawny keeps up to 12 channels. Delete one to add another.',
+      w_menu_channel: 'Channel',
+      w_menu_rename: 'Rename',
+      w_menu_switch_role: 'Switch role',
+      w_menu_delete: 'Delete channel',
+      w_del_title: 'Delete “{0}”?',
+      w_del_body: 'Devices paired to it will stop connecting. You can pair them again later.',
+      w_del_go: 'Delete',
+      w_del_done: 'Channel deleted',
+      w_scan_hint: 'Hold the Monitor’s code in frame.',
+      w_scan_paste: 'Paste link instead',
+      w_scan_not_tawny: 'That code isn’t a Tawny pairing code.',
+      w_paste_prompt: 'Paste the pairing link shown on the Monitor:',
+      w_paste_bad: 'That wasn’t a Tawny pairing link.',
+      w_link_bad: 'That pairing link wasn’t valid.',
+      w_dim_wake: 'On air — tap to wake the screen',
+      // --- support hub ---
+      w_support_title: 'Support Tawny',
+      w_support_intro: 'Tawny is free, has no ads and doesn’t collect anything about you. If you enjoy it, you can help keep it that way.',
+      w_support_kofi: 'Buy a coffee',
+      w_support_kofi_sub: 'Card or PayPal on Ko-fi',
+      w_support_ln_sub: 'Over Lightning with any wallet, or on strike.me',
+      w_support_thanks_line: 'Thank you for being here.',
+      w_support_card_sub: 'Buy a coffee, or tip in Bitcoin',
+      w_tip_no_wallet: 'No wallet? Pay on strike.me',
+      w_tip_qr_label: 'QR code of the Lightning invoice',
+      w_tip_copy_address: 'Copy address',
+      w_tip_handoff_sub: 'Open your wallet and choose any amount. Tawny stays free either way.',
+      w_tip_no_wallet_toast: 'No Lightning wallet opened here. Scan the code with your phone, or pay on strike.me.',
+      w_aria_watching_one: '{0} phone watching',
+      w_aria_watching_many: '{0} phones watching',
+      w_aria_watching_full: '{0} phones watching, full',
+      w_aria_battery: 'Monitor battery {0}%',
+      w_aria_battery_charging: 'Monitor battery {0}%, charging',
     },
 
     es: {
@@ -336,6 +445,115 @@
       w_tip_got_sats: 'Llegó tu propina · {0}',
       w_tip_thanks_body: 'Haces Tawny mejor para todos.',
       w_tip_done: 'Listo',
+      // --- screens before the call (welcome, setup, channels, sheets) ---
+      w_doc_title: 'Tawny — Monitor para mascotas',
+      w_pet_monitor: 'Monitor para mascotas',
+      w_back: 'Atrás',
+      w_back_channels: 'Volver a los canales',
+      w_cancel: 'Cancelar',
+      w_save: 'Guardar',
+      w_done: 'Listo',
+      w_not_now: 'Ahora no',
+      w_welcome_lede: 'Vigila a tu mascota desde cualquier rincón de la casa. Dos teléfonos en tu Wi-Fi: sin cuentas y sin nada que configurar.',
+      w_welcome_go: 'Empezar',
+      w_welcome_skip: 'Ya lo configuré antes',
+      w_setup_title: 'Este dispositivo',
+      w_setup_sub: '¿Qué función va a cumplir?',
+      w_role_monitor: 'El monitor',
+      w_role_viewer: 'El visor',
+      w_setup_monitor_line: 'Se queda con tu mascota',
+      w_setup_monitor_blurb: 'Conéctalo a la corriente y apunta la cámara. Envía video y sonido, responde solo y muestra un código para que el visor lo escanee.',
+      w_setup_viewer_line: 'Va contigo',
+      w_setup_viewer_blurb: 'Mira lo que ve el monitor, escucha, mantén pulsado para responder, haz sonar un timbre o guarda una foto.',
+      w_wp_sub: 'Muéstraselo al visor',
+      w_wp_hint: 'En el otro teléfono, abre Tawny, elige **El visor** y apunta su cámara a este código.',
+      w_wp_share: '¿No puedes escanear? Envía este enlace',
+      w_wp_copy: 'Copiar enlace de vinculación',
+      w_relay_summary: '¿Vas a vincular con la app de Tawny?',
+      w_relay_body: 'La app no puede abrir un enlace web. En ese teléfono, abre Tawny, mantén pulsado el número de versión al pie de la primera pantalla, elige **Servidores** y pega esto en **Rendezvous**.',
+      w_relay_copy: 'Copiar dirección del servidor',
+      w_relay_fine: 'Los dos dispositivos tienen que usar el mismo servidor para encontrarse.',
+      w_wp_waiting: 'Esperando al visor',
+      w_wp_start: 'Empezar a vigilar ahora',
+      w_wp_later: 'Configurar más tarde',
+      w_ch_new: 'Canal nuevo',
+      w_ch_title: 'Canales',
+      w_ch_empty_title: 'Todavía no hay nada vinculado',
+      w_ch_empty_body: 'Configura como monitor el teléfono que se queda con tu mascota y luego escanea su código de vinculación con este.',
+      w_ch_empty_go: 'Configurar',
+      w_ch_join_title: 'Unirse a un monitor',
+      w_ch_join_hint: 'Apunta la cámara de tu teléfono al código de vinculación que muestra el monitor. Abre esta página ya configurada.',
+      w_scan_code: 'Escanear código de vinculación',
+      w_foot_private: 'El video y el audio viajan directamente entre tus dispositivos. El servidor solo presenta un teléfono al otro y nunca recibe la clave que desbloquea la imagen.',
+      w_foot_free: 'Tawny es gratis y no desbloquea nada a cambio de dinero: aportar solo ayuda a pagar los costos de funcionamiento.',
+      w_ch_cue_monitor: 'Continuar como monitor',
+      w_ch_cue_viewer: 'Continuar como visor',
+      w_ch_cue_choose: 'Elegir monitor o visor',
+      w_ch_key: 'clave {0}…',
+      w_ch_options: 'Opciones de {0}',
+      w_role_sub: 'Elige la función de este dispositivo',
+      w_role_monitor_line: 'Déjalo con tu mascota',
+      w_role_monitor_blurb: 'Envía cámara y micrófono, responde solo, reproduce timbres y muestra un código de vinculación para tu teléfono.',
+      w_role_viewer_line: 'Llévalo contigo',
+      w_role_viewer_blurb: 'Mira y escucha, mantén pulsado para hablar, haz sonar un timbre, guarda una foto.',
+      w_join_title: 'Código de vinculación aceptado',
+      w_join_pre: 'Vas a unirte a',
+      w_join_post: 'como visor.',
+      w_join_go: 'Unirme ahora',
+      w_pair_title: 'Vincular un visor',
+      w_pair_hint: 'Apunta la cámara de tu teléfono a este código. Abre Tawny ya unido a',
+      w_pair_profile: 'Dirección que usará el visor',
+      w_pair_address: 'Dirección',
+      w_pair_copy: 'Copiar enlace',
+      w_pair_expiry: 'Este código sirve durante {0} más. Cuando caduque, aparecerá uno nuevo aquí.',
+      w_pair_this_address: 'Esta dirección: {0}',
+      w_pair_other_address: 'Otra dirección (dominio o nombre de tailnet)…',
+      w_pair_too_long: 'Esta dirección es demasiado larga para un código de vinculación. Usa un nombre de host más corto.',
+      w_pair_plain_http: 'Es una dirección http sin cifrar. El visor cargará, pero el navegador no le dejará usar el micrófono. Usa una dirección https.',
+      w_pair_relay_mismatch: 'Ese enlace indica un servidor para el que esta app no está configurada, así que se ignoró. Si los teléfonos no se encuentran, pon la misma dirección de servidor en los dos.',
+      w_copy_failed_link: 'No se pudo copiar: selecciona el texto del enlace.',
+      w_copy_failed_address: 'No se pudo copiar: selecciona la dirección.',
+      w_relay_copied: 'Dirección del servidor copiada',
+      w_editor_name: 'Nombre',
+      w_editor_ph: 'Sala',
+      w_editor_rename: 'Cambiar el nombre del canal',
+      w_editor_hint_new: 'Se genera una clave nueva para este canal. Solo los dispositivos que vincules pueden unirse.',
+      w_editor_hint_rename: 'La clave no cambia, así que los dispositivos vinculados siguen funcionando.',
+      w_editor_need_name: 'Ponle un nombre a este canal.',
+      w_editor_too_many: 'Tawny guarda hasta 12 canales. Elimina uno para agregar otro.',
+      w_menu_channel: 'Canal',
+      w_menu_rename: 'Cambiar el nombre',
+      w_menu_switch_role: 'Cambiar de función',
+      w_menu_delete: 'Eliminar canal',
+      w_del_title: '¿Eliminar “{0}”?',
+      w_del_body: 'Los dispositivos vinculados dejarán de conectarse. Puedes volver a vincularlos más tarde.',
+      w_del_go: 'Eliminar',
+      w_del_done: 'Canal eliminado',
+      w_scan_hint: 'Mantén el código del monitor dentro del recuadro.',
+      w_scan_paste: 'Pegar el enlace',
+      w_scan_not_tawny: 'Ese código no es un código de vinculación de Tawny.',
+      w_paste_prompt: 'Pega el enlace de vinculación que muestra el monitor:',
+      w_paste_bad: 'Eso no era un enlace de vinculación de Tawny.',
+      w_link_bad: 'Ese enlace de vinculación no era válido.',
+      w_dim_wake: 'Al aire: toca para encender la pantalla',
+      // --- support hub ---
+      w_support_title: 'Apoya a Tawny',
+      w_support_intro: 'Tawny es gratis, no tiene anuncios y no recopila nada sobre ti. Si te gusta, puedes ayudar a que siga así.',
+      w_support_kofi: 'Invita un café',
+      w_support_kofi_sub: 'Con tarjeta o PayPal en Ko-fi',
+      w_support_ln_sub: 'Por Lightning con cualquier billetera, o en strike.me',
+      w_support_thanks_line: 'Gracias por estar aquí.',
+      w_support_card_sub: 'Invita un café o da una propina en Bitcoin',
+      w_tip_no_wallet: '¿Sin billetera? Paga en strike.me',
+      w_tip_qr_label: 'Código QR de la factura Lightning',
+      w_tip_copy_address: 'Copiar dirección',
+      w_tip_handoff_sub: 'Abre tu billetera y elige el monto que quieras. Tawny sigue siendo gratis igual.',
+      w_tip_no_wallet_toast: 'No se abrió ninguna billetera Lightning aquí. Escanea el código con tu teléfono o paga en strike.me.',
+      w_aria_watching_one: '{0} teléfono mirando',
+      w_aria_watching_many: '{0} teléfonos mirando',
+      w_aria_watching_full: '{0} teléfonos mirando, lleno',
+      w_aria_battery: 'Batería del monitor: {0} %',
+      w_aria_battery_charging: 'Batería del monitor: {0} %, cargando',
     },
   };
 
@@ -344,6 +562,7 @@
     has(l) { return Object.prototype.hasOwnProperty.call(DICT, l); },
     set(l) {
       if (l && T.has(l)) T.lang = l;
+      document.documentElement.lang = T.lang;
       T.applyStatic();
     },
     t(key) {
@@ -363,14 +582,46 @@
       scope.querySelectorAll('[data-i18n-aria]').forEach((el) => {
         el.setAttribute('aria-label', T.t(el.getAttribute('data-i18n-aria')));
       });
+      scope.querySelectorAll('[data-i18n-title]').forEach((el) => {
+        el.title = T.t(el.getAttribute('data-i18n-title'));
+      });
+      scope.querySelectorAll('[data-i18n-ph]').forEach((el) => {
+        el.placeholder = T.t(el.getAttribute('data-i18n-ph'));
+      });
+      // **word** in the string becomes <b>word</b>. Built from text nodes, so
+      // nothing in a translation is ever parsed as HTML.
+      scope.querySelectorAll('[data-i18n-rich]').forEach((el) => {
+        const parts = T.t(el.getAttribute('data-i18n-rich')).split('**');
+        el.replaceChildren(...parts.map((p, i) => {
+          if (i % 2 === 0) return document.createTextNode(p);
+          const b = document.createElement('b');
+          b.textContent = p;
+          return b;
+        }));
+      });
+      if (!root && document.documentElement.hasAttribute('data-i18n-doc-title')) {
+        document.title = T.t(document.documentElement.getAttribute('data-i18n-doc-title'));
+      }
     },
   };
+
+  // A browser (Docker, Desktop) starts in the first language its user lists
+  // that we have. The Android shell always passes its own choice through
+  // tawnyStart(), which calls set() and overrides this.
+  try {
+    const want = navigator.languages && navigator.languages.length
+      ? navigator.languages : [navigator.language];
+    for (const tag of want) {
+      const base = String(tag || '').toLowerCase().split('-')[0];
+      if (T.has(base)) { T.lang = base; break; }
+    }
+  } catch (e) {}
 
   window.TawnyT = T;
   window.t = function () { return T.t.apply(T, arguments); };
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function () { T.applyStatic(); });
+    document.addEventListener('DOMContentLoaded', function () { T.set(T.lang); });
   } else {
-    T.applyStatic();
+    T.set(T.lang);
   }
 })();

@@ -194,6 +194,12 @@ body {
 
 button { font: inherit; color: inherit; cursor: pointer; }
 
+/* Read by screen readers, not drawn: the #announcer live region. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
 :focus-visible {
   outline: 2px solid var(--berry);
   outline-offset: 2px;
@@ -331,119 +337,197 @@ button { font: inherit; color: inherit; cursor: pointer; }
   text-underline-offset: 2px;
 }
 
-/* --------------------------------------------------------- tip buttons
+/* --------------------------------------------------------- support
  *
- * Ko-fi and Lightning, drawn locally.
+ * "Support Tawny": a ♥ in the Channels app bar, a card under the channel list
+ * and a button on the update board all open one sheet (tip.js). It starts on
+ * a small hub — Buy a coffee on Ko-fi, or Tip in Bitcoin — the shape of
+ * Nudge's Support box, in Tawny's palette: Ko-fi wears berry, Lightning sky.
  *
- * NOT the official Ko-fi widget. That is a remote <script> from
- * storage.ko-fi.com plus an inline `kofiwidget2.init(...)` call, and this page
- * ships inside the WebView that also owns the TawnyNative JS bridge under
- * `default-src 'none'; script-src 'self'` (see SECURITY.md, "WebView
- * hardening"). Dropping it in means allowing a third-party origin AND
- * 'unsafe-inline' in the one document where a script injection reaches native
- * code — an actual security regression, traded for a button. So: two anchors,
- * an inline SVG mark each, and our own palette.
+ * Ko-fi is a plain first-party link, NOT the official Ko-fi widget. That is a
+ * remote <script> from storage.ko-fi.com plus an inline `kofiwidget2.init(...)`
+ * call, and this page ships inside the WebView that also owns the
+ * TawnyNative JS bridge under `default-src 'none'; script-src 'self'` (see
+ * SECURITY.md, "WebView hardening"). Dropping it in means allowing a
+ * third-party origin AND 'unsafe-inline' in the one document where a script
+ * injection reaches native code. If someone later builds a hosted marketing
+ * page outside the app, the widget's parameters are: brand blue #72a4f2,
+ * widget/page id A6N425ZWFE, script Widget_2.js. Not in here.
  *
- * If someone later builds a real hosted marketing page, outside the app and
- * outside this CSP, the official widget's parameters are:
- *   brand blue #72a4f2, widget/page id A6N425ZWFE, script Widget_2.js.
- * Do not bring any of that back in here.
- *
- * The motion is the native app's, ported: the fill sweeps left-to-right from a
- * scaleX(0) origin and a second label is revealed under it in lockstep — the
- * CSS twin of MainActivity's WipeLabel, down to sizing the label box to the
- * wider of the two strings so nothing reflows. On press each mark then plays
- * its own character, exactly as IconView does: the Ko-fi heart double-thumps
- * (beat()), the bolt takes one hard zap with a bloom behind it (strike()).
- * The global [data-motion="off"] block collapses all of it.
+ * Each icon keeps the press character the old pills had, ported from the
+ * native IconView: the coffee heart double-thumps (beat()), the bolt takes one
+ * hard zap with a bloom behind it (strike()). [data-motion="off"] collapses it.
  */
 
-.tips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 14px;
+/* Support Tawny — structure after the Airbnb system in the design-md
+   library (picture-first cards, one accent used sparingly, selection in
+   ink, flat surfaces with a single hover lift, one loud number), worn in
+   Tawny's own palette, brush heading and pets.
+     ink    → --fg          muted → --dim        hairline → --line
+     soft   → --raise       accent (the only one) → --berry
+   Radii: 8 buttons · 14 plates and cards · full for pills and orbs. */
+:root {
+  --heart: #e0344f;   /* the Support heart: red on every palette, never the accent */
+  --sup-lift: 0 0 0 1px rgba(0, 0, 0, .02), 0 2px 6px rgba(0, 0, 0, .04), 0 4px 8px rgba(0, 0, 0, .1);
+  --sup-plate: color-mix(in srgb, var(--berry) 9%, var(--raise));
 }
 
-.tip {
-  --tip: var(--berry);
-  --tip-deep: var(--berry-d);
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  padding: 9px 15px;
-  border: 1px solid var(--tip);
-  border-radius: 11px;   /* the app's CONTROL radius */
-  color: var(--tip-deep);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.2;
-  text-decoration: none;
+.appbar-heart { color: var(--heart); }
+.appbar-heart svg {
+  width: 21px; height: 21px; fill: currentColor; stroke: none;
+  transform-origin: 50% 55%;
+  animation: heart-idle 9s 3s ease-in-out infinite;   /* a double beat now and then */
+}
+.appbar-heart:active svg { animation: tip-beat .52s linear; }
+@keyframes heart-idle {
+  0%, 88%, 100% { transform: scale(1); }
+  90% { transform: scale(1.22); } 92% { transform: scale(1.02); } 94% { transform: scale(1.14); } 96% { transform: scale(1); }
+}
+
+/* ---- the card under the channel list: stands out by inverting the page — an
+   ink card with paper text (dark on light, light on dark, ~11:1) — with the
+   owlet and a red heart that beats softly. Compact. */
+.support-card {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0 12px;
+  width: 100%; margin-top: 16px; padding: 8px 14px 8px 8px; min-height: 60px;
+  text-align: left; font: inherit; color: var(--bg);
+  background: var(--fg); border: 0; border-radius: 14px;
+  -webkit-tap-highlight-color: transparent;
+  transition: box-shadow .2s ease, transform .2s cubic-bezier(.2, .8, .3, 1);
+}
+.support-card:hover { box-shadow: var(--sup-lift); }
+.support-card:active { transform: scale(.985); }
+.support-card-ico {
+  position: relative; display: grid; place-items: center;
+  width: 44px; height: 44px; border-radius: 12px; background: color-mix(in srgb, var(--bg) 14%, transparent);
+}
+.support-card-ico canvas { width: 40px; height: 36px; }
+.support-card-heart {
+  position: absolute; right: -6px; bottom: -5px; width: 20px; height: 20px; fill: var(--heart);
+  transform-origin: 50% 55%; animation: heart-soft 2.8s 1s ease-in-out infinite;
+}
+.support-card-tt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.support-card-tt b { font-size: 15.5px; font-weight: 600; line-height: 1.25; }
+.support-card-tt span { font-size: 13px; line-height: 1.35; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.support-card-go svg {
+  width: 20px; height: 20px; display: block;
+  fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
+}
+.support-card-go { color: var(--bg); transition: transform .14s ease; }
+.support-card:active { background: color-mix(in srgb, var(--fg) 88%, var(--bg)); }
+@keyframes heart-soft { 0%, 70%, 100% { transform: scale(1); } 80% { transform: scale(1.18); } 90% { transform: scale(1.04); } }
+.support-card:hover .support-card-go { transform: translateX(3px); }
+
+/* ---- the update board's way in: the accent pill */
+.wn-support {
+  display: inline-flex; align-items: center; gap: 8px; align-self: center;
+  margin-top: 16px; padding: 10px 20px; min-height: 44px;
+  font: inherit; font-size: 14px; font-weight: 600; color: var(--bg);
+  background: var(--fg); border: 0; border-radius: 9999px;
   -webkit-tap-highlight-color: transparent;
 }
+.wn-support:active { background: color-mix(in srgb, var(--fg) 88%, var(--bg)); }
+.wn-support svg { width: 16px; height: 16px; fill: var(--heart); transform-origin: 50% 55%; animation: heart-soft 2.8s 1s ease-in-out infinite; }
 
-.tip-bolt { --tip: var(--sky); --tip-deep: var(--sky-d); }
+/* ---- the hub */
+.tip-hub { display: flex; flex-direction: column; gap: 8px; }
 
-/* The wipe. Covers the resting label; the revealed one rides on top of it. */
-.tip::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  background: var(--tip-deep);
-  transform: scaleX(0);
-  transform-origin: left center;
-  transition: transform .3s cubic-bezier(.15, .75, .3, 1);
+/* The trio's plate: the picture leads, as a photo would. */
+.hub-stage {
+  position: relative; overflow: hidden;
+  aspect-ratio: 16 / 7; min-height: 150px; margin-bottom: 8px; border-radius: 14px;
+  background: var(--sup-plate);
+}
+.hub-scene {
+  position: absolute; left: 50%; bottom: -14px; width: 330px; height: 236px;
+  transform: translateX(-50%); cursor: pointer;
 }
 
-.tip:hover::before,
-.tip:focus-visible::before,
-.tip:active::before { transform: scaleX(1); }
+/* Modest heading, as the system keeps them; Tawny's brush face carries it. */
+.sheet-card .tip-hub h2 {
+  margin: 4px 0 0; font-family: var(--display); font-weight: 400;
+  font-size: 34px; line-height: 1.1; letter-spacing: 0; color: var(--fg);
+}
+.hub-intro { margin: 0 0 8px; font-size: 16px; line-height: 1.5; color: var(--fg); text-wrap: pretty; }
 
-.tip-mark {
-  position: relative;
-  z-index: 2;          /* the mark stays legible on top of the fill */
-  display: inline-flex;
-  width: 17px;
-  height: 17px;
-  transition: color .14s ease-out;
+/* Two cards, 2-up: plate, then title and one line. No border; the plate is the card. */
+.hub-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 12px; }
+.hub-card {
+  display: flex; flex-direction: column; align-items: stretch; gap: 2px;
+  padding: 0; text-align: left; text-decoration: none; font: inherit; color: var(--fg);
+  background: none; border: 0; border-radius: 14px;
+  -webkit-tap-highlight-color: transparent;
+}
+.hub-card:focus-visible { outline: 2px solid var(--fg); outline-offset: 4px; }
+.hub-plate {
+  position: relative; display: grid; place-items: center; overflow: hidden;
+  aspect-ratio: 4 / 3; margin-bottom: 8px; border-radius: 14px;
+  background: var(--sup-plate);
+  transition: box-shadow .2s ease, transform .2s cubic-bezier(.2, .8, .3, 1);
+}
+.hub-card:hover .hub-plate { box-shadow: var(--sup-lift); transform: translateY(-2px); }
+.hub-card:active .hub-plate { transform: scale(.97); }
+.hub-card b { font-size: 16px; font-weight: 600; line-height: 1.25; }
+.hub-card small { font-size: 14px; line-height: 1.43; color: var(--dim); }
+
+.hub-art { width: 62%; height: auto; }
+.hub-kofi .mug { fill: var(--fg); }
+.hub-kofi .mug-heart { fill: var(--heart); transform-origin: 40px 48px; animation: heart-idle 5s 2s ease-in-out infinite; }
+.hub-kofi .steam {
+  fill: none; stroke: var(--dim); stroke-width: 3.2; stroke-linecap: round;
+  opacity: 0; animation: steam 2.6s ease-out infinite;
+}
+.hub-kofi .s2 { animation-delay: .85s; }
+.hub-kofi .s3 { animation-delay: 1.7s; }
+@keyframes steam {
+  0%   { opacity: 0; transform: translateY(6px); }
+  35%  { opacity: .8; }
+  100% { opacity: 0; transform: translateY(-8px); }
+}
+.hub-kofi:active .mug-heart { animation: tip-beat .52s linear; }
+
+/* The accent's one round moment on the hub: the bolt in an orb. */
+.hub-orb {
+  display: grid; place-items: center; width: 44%; aspect-ratio: 1;
+  border-radius: 9999px; background: var(--berry);
+}
+.hub-orb svg { width: 56%; height: 56%; }
+.hub-orb .bolt { fill: var(--on-accent); transform-origin: 40px 40px; animation: bolt-idle 4.6s 1.2s ease-in-out infinite; }
+@keyframes bolt-idle {
+  0%, 84%, 100% { transform: none; }
+  87% { transform: translateX(3px) scale(1.06); } 90% { transform: translateX(-3px); } 93% { transform: translateX(1.5px); }
+}
+.hub-bolt:active .bolt { animation: tip-zap .38s linear; }
+
+.hub-foot { margin: 8px 0 0; font-size: 14px; color: var(--dim); }
+/* "Not now": tertiary text, underlined on hover. */
+#tip .tip-close { color: var(--fg); font-weight: 500; }
+#tip .tip-close:hover { text-decoration: underline; color: var(--fg); }
+
+/* Each page comes up in a short stagger. */
+.tip-hub.enter > *, #tip-pick.enter > *, .tip-thanks.enter > * { animation: page-in .4s cubic-bezier(.2, .8, .3, 1) both; }
+.tip-hub.enter > :nth-child(2), #tip-pick.enter > :nth-child(2) { animation-delay: .06s; }
+.tip-hub.enter > :nth-child(3), #tip-pick.enter > :nth-child(3) { animation-delay: .12s; }
+.tip-hub.enter > :nth-child(4), #tip-pick.enter > :nth-child(4) { animation-delay: .18s; }
+.tip-hub.enter > :nth-child(n+5), #tip-pick.enter > :nth-child(n+5) { animation-delay: .24s; }
+.tip-hub.enter .hub-card:nth-child(2) { animation: page-in .4s .28s cubic-bezier(.2, .8, .3, 1) both; }
+.tip-hub.enter .hub-card:nth-child(1) { animation: page-in .4s .2s cubic-bezier(.2, .8, .3, 1) both; }
+@keyframes page-in { from { opacity: 0; transform: translateY(14px); } }
+
+/* Back: the system's round icon button on the strong surface. */
+.tip-back {
+  flex: none; width: 40px; height: 40px; margin: 0 4px 0 -4px;
+  display: grid; place-items: center; padding: 0;
+  color: var(--fg); background: var(--raise); border: 0; border-radius: 9999px;
+  -webkit-tap-highlight-color: transparent;
+}
+.tip-back:hover { background: color-mix(in srgb, var(--fg) 10%, var(--raise)); }
+.tip-back svg {
+  width: 18px; height: 18px;
+  fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;
 }
 
-.tip-mark svg { width: 100%; height: 100%; fill: currentColor; }
-
-.tip:hover .tip-mark,
-.tip:focus-visible .tip-mark,
-.tip:active .tip-mark { color: var(--on-accent); }
-
-/* Both strings share one grid cell, so the button is sized by the wider of
-   them and the swap never moves anything. */
-.tip-label {
-  position: relative;
-  display: inline-grid;
-  white-space: nowrap;
-}
-
-.tip-base, .tip-alt { grid-area: 1 / 1; }
-.tip-base { position: relative; z-index: 0; }
-
-.tip-alt {
-  position: relative;
-  z-index: 2;
-  color: var(--on-accent);
-  clip-path: inset(0 100% 0 0);
-  transition: clip-path .3s cubic-bezier(.15, .75, .3, 1);
-}
-
-.tip:hover .tip-alt,
-.tip:focus-visible .tip-alt,
-.tip:active .tip-alt { clip-path: inset(0 0 0 0); }
-
-.tip:focus-visible { outline: 2px solid var(--tip); outline-offset: 2px; }
-
-/* The press. One shot each, in character — see IconView.beat / IconView.strike. */
+/* Press characters, from the native IconView. */
 @keyframes tip-beat {
   0%   { transform: scale(1); }
   22%  { transform: scale(1.28); }
@@ -461,27 +545,11 @@ button { font: inherit; color: inherit; cursor: pointer; }
   100% { transform: translateX(0);      opacity: 1; }
 }
 
-/* ...and the bloom the bolt leaves behind it. */
-.tip-mark::after {
-  content: "";
-  position: absolute;
-  inset: -5px;
-  border-radius: 50%;
-  /* the lighter accent over the deeper fill, so it blooms bright in both
-     palettes — currentColor would go near-black under the dark theme */
-  background: var(--tip);
-  opacity: 0;
-  pointer-events: none;
-}
-
 @keyframes tip-bloom {
   0%   { transform: scale(.55); opacity: .45; }
   100% { transform: scale(2);   opacity: 0; }
 }
 
-.tip-kofi:active .tip-mark svg { animation: tip-beat .52s linear; }
-.tip-bolt:active .tip-mark svg { animation: tip-zap .38s linear; }
-.tip-bolt:active .tip-mark::after { animation: tip-bloom .38s ease-out; }
 
 /* ------------------------------------------------------------- live */
 
@@ -1399,6 +1467,9 @@ body.dimmed #theme-toggle { display: none; }
 
 .dim-label {
   margin: 0;
+  padding: 8px 12px;
+  background: none;
+  border: 0;
   color: #7d6f5e;    /* warm, and still nearly nothing on a black screen */
   font-size: 10.5px;
   letter-spacing: .22em;
@@ -1500,6 +1571,8 @@ body.dimmed #theme-toggle { display: none; }
 .wide.primary { background: var(--berry); color: var(--on-accent); border-color: var(--berry); }
 .wide.primary:hover { filter: brightness(1.06); color: var(--on-accent); }
 .wide.ghost { background: none; font-weight: 500; }
+.wide.primary.danger { background: var(--live-ink); border-color: var(--live-ink); }
+.wide.primary.danger:hover { color: var(--on-accent); }
 
 .warn {
   margin: 0;
@@ -2062,6 +2135,9 @@ body.dimmed #theme-toggle { display: none; }
 }
 
 .sheet-actions { display: flex; gap: 9px; margin-top: 2px; }
+/* The card takes focus when a sheet opens so a screen reader starts at its
+   title; it is not a control, so it draws no ring. */
+.sheet-card:focus { outline: none; }
 .sheet-actions .wide { flex: 1; }
 
 /* On a tablet or a desktop window a bottom sheet reads as a stranded strip,
@@ -2515,7 +2591,6 @@ body:has(#live:not([hidden])) #theme-toggle {
   line-height: 1.4;
   color: var(--dim);
 }
-.wn-tips { justify-content: center; margin-top: 14px; }
 .wn-card .sheet-actions { align-self: stretch; margin-top: 18px; }
 
 /* ------------------------------------------------------------ who's here */
@@ -2527,8 +2602,8 @@ body:has(#live:not([hidden])) #theme-toggle {
 #who, #myname { z-index: 55; }
 /* The one thing in the rail that takes a touch (the rail itself passes them
    through to the video). A little extra hit area round a small chip. */
-#peercount[role="button"] { pointer-events: auto; cursor: pointer; position: relative; }
-#peercount[role="button"]::after { content: ""; position: absolute; inset: -9px -5px; }
+#peercount { pointer-events: auto; cursor: pointer; position: relative; font: inherit; margin: 0; }
+#peercount::after { content: ""; position: absolute; inset: -9px -5px; }
 
 .who-list {
   list-style: none;
@@ -2603,22 +2678,22 @@ body:has(#live:not([hidden])) #theme-toggle {
 }
 .tip-head-mark svg { width: 22px; height: 22px; fill: currentColor; }
 
-.tip-amounts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-top: 12px; }
+.tip-amounts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 16px; }
+/* Amount pills; the picked one fills with ink, as a picked date does. */
 .tip-amt {
-  display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 52px; padding: 8px 2px;
-  color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-ctl);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
+  min-height: 56px; padding: 6px 2px;
+  color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 9999px;
   cursor: pointer; -webkit-tap-highlight-color: transparent;
-  transition: background .14s ease, border-color .14s ease, transform .13s cubic-bezier(.2, .8, .3, 1);
+  transition: border-color .14s ease, background .14s ease, color .14s ease, transform .13s cubic-bezier(.2, .8, .3, 1);
 }
-.tip-amt:hover { background: var(--raise); }
-.tip-amt:active { transform: scale(.97); }
-.tip-amt[aria-checked="true"] {
-  border-color: var(--sky); background: color-mix(in srgb, var(--sky) 11%, var(--panel));
-  box-shadow: inset 0 0 0 1px var(--sky);
-}
-.tip-amt b { font-size: 15px; font-weight: 600; }
-.tip-amt small { font-size: 10.5px; color: var(--dim); white-space: nowrap; }
-.tip-amt:focus-visible { outline: 2px solid var(--sky); outline-offset: 2px; }
+.tip-amt:hover { border-color: var(--fg); }
+.tip-amt:active { transform: scale(.96); }
+.tip-amt[aria-checked="true"] { color: var(--bg); background: var(--fg); border-color: var(--fg); }
+.tip-amt b { font-size: 16px; font-weight: 600; line-height: 1.25; }
+.tip-amt small { font-size: 11px; color: var(--dim); white-space: nowrap; }
+.tip-amt[aria-checked="true"] small { color: inherit; opacity: .8; }
+.tip-amt:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
 
 .tip-other { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; }
 .tip-other > span { color: var(--dim); font-weight: 600; }
@@ -2629,17 +2704,61 @@ body:has(#live:not([hidden])) #theme-toggle {
 .tip-other input:focus { border-color: var(--sky); }
 .sheet .tip-other .wide { flex: none; width: auto; min-height: 46px; padding: 11px 16px; }
 
+/* The code on a white plate, rounded and clipped like a listing photo, with
+   one hairline and the accent orb in the middle. Paper and ink stay
+   light-on-dark in both themes: a QR has to stay a QR. Tawny perches on top. */
 .tip-qr {
-  position: relative; width: min(232px, 70vw); aspect-ratio: 1; margin: 14px auto 0; padding: 10px;
-  background: #fff; border: 1px solid var(--line); border-radius: var(--r-card);
+  --qr-ink: #2b2420;
+  --qr-paper: #ffffff;
+  position: relative;
+  width: min(248px, 72vw); aspect-ratio: 1;
+  margin: 50px auto 0; padding: 12px;
+  background: var(--qr-paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
 }
-.tip-qr-img { width: 100%; height: 100%; }
+.tip-qr-img { position: relative; width: 100%; height: 100%; }
 .tip-qr-img svg { display: block; width: 100%; height: 100%; }
-.tip-qr[data-state="qr"] .tip-qr-img { animation: tip-fade .25s ease; }
+.tip-qr-img .qr-paper { fill: var(--qr-paper); }
+.tip-qr-img .qr-dots { fill: var(--qr-ink); }
+.tip-qr-img .qr-eye { color: var(--qr-ink); transform-box: fill-box; transform-origin: center; }   /* ink, like everything that isn't the accent */
+.tip-qr-img .qr-eye rect { stroke: currentColor; }
+.tip-qr-img .qr-eye rect + rect { fill: currentColor; stroke: none; }
 .tip-qr:not([data-state="qr"]) .tip-qr-img { visibility: hidden; }
+
+.tip-qr[data-state="qr"] .tip-qr-img { animation: qr-print .45s cubic-bezier(.2, .8, .3, 1) both; }
+.tip-qr[data-state="qr"] .qr-eye { animation: qr-pop .4s cubic-bezier(.3, 1.5, .5, 1) both; }
+.tip-qr[data-state="qr"] .eye-b { animation-delay: .2s; }
+.tip-qr[data-state="qr"] .eye-c { animation-delay: .28s; }
+.tip-qr[data-state="qr"] .eye-a { animation-delay: .36s; }
+@keyframes qr-print { from { opacity: 0; transform: translateY(12px) scale(.97); } }
+@keyframes qr-pop { from { opacity: 0; transform: scale(.9); } }
+
+/* The orb: the accent's one moment on this page. */
+.tip-qr-badge {
+  position: absolute; left: 50%; top: 50%;
+  width: 15%; aspect-ratio: 1; transform: translate(-50%, -50%);
+  display: grid; place-items: center; border-radius: 9999px;
+  background: #d24b6d;
+  box-shadow: 0 0 0 4px var(--qr-paper);
+}
+.tip-qr-badge svg { width: 54%; height: 54%; fill: #fff; }
+.tip-qr:not([data-state="qr"]) .tip-qr-badge { display: none; }
+.tip-qr[data-state="qr"] .tip-qr-badge { animation: badge-in .4s .45s cubic-bezier(.3, 1.5, .5, 1) both; }
+@keyframes badge-in { from { opacity: 0; transform: translate(-50%, -50%) scale(.9); } }
+.tip-qr.is-waiting .tip-qr-badge svg { animation: badge-zap 2.8s 1.6s ease-in-out infinite; }
+@keyframes badge-zap { 0%, 86%, 100% { transform: none; } 90% { transform: scale(1.22) rotate(-8deg); } 94% { transform: scale(.94) rotate(4deg); } }
+
+/* Tawny on the top edge: she hops while you scan, once per amount step when
+   you pick one, and flutters when tapped. */
+.tip-owl {
+  position: absolute; left: 50%; top: -53px; z-index: 2;
+  width: 78px; height: 70px; transform: translateX(-50%);
+  cursor: pointer;
+}
 .tip-qr-state {
   position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 10px; padding: 18px; text-align: center; font-size: 13px; color: #5a5364;
+  gap: 10px; padding: 18px; text-align: center; font-size: 13px; color: #5a5364; z-index: 1;
 }
 .tip-qr[data-state="qr"] .tip-qr-state { display: none; }
 .tip-qr:not([data-state="loading"]) .tip-qr-state .tip-spin { display: none; }
@@ -2686,7 +2805,7 @@ body:has(#live:not([hidden])) #theme-toggle {
 @keyframes tip-rise { from { opacity: 0; transform: translateY(6px); } }
 .tip-hearts { position: absolute; inset: 0; pointer-events: none; }
 .tip-hearts span {
-  position: absolute; bottom: 35%; color: var(--berry); opacity: 0; font-size: calc(14px * var(--s, 1));
+  position: absolute; bottom: 35%; color: var(--heart); opacity: 0; font-size: calc(14px * var(--s, 1));
   animation: tip-drift 3s ease-out forwards;
 }
 @keyframes tip-drift {
@@ -2700,3 +2819,59 @@ body:has(#live:not([hidden])) #theme-toggle {
   .tip-thanks h2, .tip-thanks .hint, .tip-thanks .sheet-actions, .tip-got { animation: none; }
   .tip-spin { animation-duration: 2.4s; }
 }
+
+/* ------------------------------------------------- support: Lightning page */
+
+#tip-pick { display: flex; flex-direction: column; }
+#tip-pick .tip-head h2 { font-size: 20px; font-weight: 600; line-height: 1.2; }
+#tip-pick .tip-head .hint { font-size: 14px; }
+/* Buttons: the primary keeps the app's berry; the other is outlined in ink. */
+#tip .sheet-actions .wide { min-height: 48px; border-radius: 8px; }
+#tip .tip-actions a.wide:not(.primary) { background: var(--panel); border: 1px solid var(--fg); color: var(--fg); }
+.tip-other input {
+  height: 56px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel);
+}
+.tip-other input:focus { border: 2px solid var(--fg); }
+.sheet .tip-other .wide { min-height: 56px; border-radius: 8px; }
+.tip-codeline .linkbtn { color: var(--fg); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ------------------------------------------------- support: thank-you */
+
+.tip-party { position: relative; width: 250px; height: 160px; margin: -4px auto 0; }
+.tip-party canvas { width: 100%; height: 100%; }
+.tip-party .tip-check {
+  position: absolute; right: -8px; top: 0; width: 44px; height: 44px; margin: 0;
+  border-radius: 50%; background: var(--panel);
+}
+.tip-thanks h2 { font-family: var(--display); font-weight: 400; font-size: 34px; line-height: 1.1; }
+/* The sheet's one loud number. */
+.tip-big { display: flex; flex-direction: column; align-items: center; gap: 2px; margin: 6px 0 4px; }
+.tip-big b { font-size: 64px; font-weight: 700; line-height: 1.05; letter-spacing: -1px; color: var(--fg); font-variant-numeric: tabular-nums; }
+.tip-big span { font-size: 14px; color: var(--dim); }
+.tip-thanks.enter .tip-big b { animation: big-in .6s .35s cubic-bezier(.3, 1.4, .5, 1) both; }
+@keyframes big-in { from { opacity: 0; transform: translateY(10px) scale(.92); } }
+.tip-thanks .tip-got { font-size: 14px; font-weight: 400; color: var(--dim); }
+.tip-hearts span svg { display: block; width: calc(16px * var(--s, 1)); height: calc(16px * var(--s, 1)); fill: currentColor; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hub-kofi .steam { display: none; }
+  .appbar-heart svg, .support-card-heart, .wn-support svg, .tip-qr-badge svg,
+  .hub-kofi .mug-heart, .hub-orb .bolt { animation: none; }
+}
+[data-motion="off"] .hub-kofi .steam { display: none; }
+
+/* ------------------------------------------- support: inside the Android app
+ * The app's Support screen is a WebView showing only this sheet, so it fills
+ * the screen as a page of its own: no scrim, no grip, no slide, no theme
+ * button (the app has its own). */
+html.support-shell #theme-toggle { display: none; }
+html.support-shell #tip { background: var(--panel); align-items: stretch; }
+html.support-shell #tip .sheet-card {
+  width: min(560px, 100%); max-height: none; height: 100%; margin: 0 auto;
+  padding-top: calc(20px + var(--safe-t)); border: 0; border-radius: 0; box-shadow: none;
+  transform: none; transition: none;
+}
+html.support-shell #tip .sheet-grip { display: none; }
+
+/* The Play build's Lightning page: the address only. */
+#tip-pick.handoff .tip-amounts, #tip-pick.handoff .tip-other, #tip-pick.handoff .tip-waiting { display: none; }
