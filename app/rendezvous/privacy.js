@@ -19,7 +19,7 @@
 //   deno/main.ts     (Deno Deploy alternative)
 //   ../server.js     (self-host reference)
 
-export const PRIVACY_UPDATED = '2026-10-01';
+export const PRIVACY_UPDATED = '2026-10-16';
 
 export const PRIVACY_HEADERS = {
   'content-type': 'text/html; charset=utf-8',
@@ -247,20 +247,34 @@ export const PRIVACY_HTML = `<!doctype html>
   <p>Supporting Tawny is entirely optional and unlocks nothing &mdash; every
   feature is available to everyone, whether or not anyone ever contributes.</p>
   <ul>
-    <li><strong>Ko-fi.</strong> The About screen and the web client's footer
-      carry one external link, to
+    <li><strong>Ko-fi.</strong> The <strong>Support Tawny</strong> screen
+      carries one external link, to
       <a href="https://ko-fi.com/tawnyone">ko-fi.com/tawnyone</a>. Following it
       opens your browser; nothing about you is sent there by the app. Any payment
       page reached that way is operated by Ko-fi under its own privacy policy,
       not by us.</li>
-    <li><strong>Bitcoin (Lightning).</strong> The <strong>Tip in Bitcoin</strong>
-      screen shows a Lightning Address (<code>loustrikes@strike.me</code>). Its
-      button asks Android to open that address in whatever Lightning wallet you
-      have installed; the wallet, not Tawny, does everything from there. Tawny
-      sets no amount, holds no funds, includes no wallet, and never handles a
-      key, an invoice or a payment. If you have no wallet installed, the screen
-      simply shows the address and a QR code. Nothing about you is sent anywhere
-      by opening this screen.</li>
+    <li><strong>Bitcoin (Lightning), Google Play edition.</strong>
+      <strong>Tip in Bitcoin</strong> shows a Lightning Address
+      (<code>loustrikes@strike.me</code>). Its button asks Android to open that
+      address in whatever Lightning wallet you have installed; the wallet, not
+      Tawny, does everything from there. Tawny sets no amount, holds no funds,
+      includes no wallet, and never handles a key, an invoice or a payment. If
+      you have no wallet installed, the screen simply shows the address and a QR
+      code. Nothing about you is sent anywhere by opening this screen.</li>
+    <li><strong>Bitcoin (Lightning), every other edition</strong> (GitHub APK,
+      F-Droid, Desktop, Docker and the browser). Only once you open
+      <strong>Tip in Bitcoin</strong>, Tawny asks Coinbase
+      (<code>api.coinbase.com</code>) for the current Bitcoin price, to show
+      amounts in sats. When you pick an amount, it asks strike.me for a
+      Lightning invoice of that amount, attaching a tip request signed by a
+      throwaway key made for that one tip. While the screen is open it listens
+      on four public Nostr relays (relay.damus.io, nos.lol, relay.primal.net,
+      relay.snort.social) for the signed receipt Strike publishes when that
+      invoice is paid, so it can say thank you. Those services see an ordinary
+      request from your IP address, as with any website; Tawny sends them
+      nothing about you, holds no funds, and never sees your wallet or a key
+      that could spend anything. Leaving the screen closes those
+      connections.</li>
   </ul>
 
   <h2>Changes</h2>
