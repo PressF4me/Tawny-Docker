@@ -15,6 +15,7 @@ import { join, extname, normalize, sep, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID, createHash, createHmac, X509Certificate, createPrivateKey } from 'node:crypto';
 import { WebSocketServer } from 'ws';
+import { setupGuard, isLocalAddr } from './docker/setup-guard.js';
 import { PRIVACY_HTML, PRIVACY_HEADERS } from './rendezvous/privacy.js';
 import {
   ADMIT_TIMEOUT_MS, CLOSE, MAX_MSG, MAX_PER_ROOM, MAX_STATIONS, RELAY,
@@ -828,16 +829,14 @@ const AUTHKEY_RE = TS_LOGIN_SERVER
   : /^tskey-[A-Za-z0-9._~-]{8,256}$/;
 
 /**
- * Only a machine on the operator's own network may complete first-run setup.
- * Under `network_mode: host` that is already everyone who can reach the port,
- * so this is a backstop against an unexpected exposure rather than the primary
- * control — the primary control is that joining is refused once joined.
+ * Only a machine on the operator's own network may use the /setup actions.
+ * The full rule — own network on every proxy hop, same-site, and a name that
+ * cannot be DNS-rebound — is setupGuard() in docker/setup-guard.js, applied
+ * once in handler() before any /setup POST is routed. This is the address half
+ * of it, kept on each route as a backstop.
  */
 function fromLocalNetwork(req) {
-  const raw = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
-  if (raw === '127.0.0.1' || raw === '::1') return true;
-  if (/^f[cd]/i.test(raw)) return true;
-  return isLanTarget(raw);
+  return isLocalAddr(req.socket.remoteAddress);
 }
 
 function readJsonBody(req, limit = 8192) {
@@ -1331,6 +1330,17 @@ const handler = async (req, res) => {
 
   const url = new URL(req.url, 'http://localhost');
 
+  // Every /setup action, before any of them runs: from the operator's own
+  // network on every hop, from the setup page itself, on a name that is ours.
+  if (setupPost) {
+    const dnsName = setupCache.value && setupCache.value.tailscale && setupCache.value.tailscale.dnsName;
+    const denied = setupGuard(req, { allowedHosts: ALLOWED_HOSTS, ownNames: [PUBLIC_HOST, dnsName] });
+    if (denied) {
+      log(`setup: refused ${url.pathname} from ${req.socket.remoteAddress} — ${denied.error}`);
+      return json(res, denied.code, { error: denied.error });
+    }
+  }
+
   if (url.pathname === '/config.json') {
     // With no RENDEZVOUS_URL set, hand back the origin this request came in on.
     // A phone that scanned a QR for `https://box.example` is then told to sign
@@ -1432,6 +1442,14 @@ const handler = async (req, res) => {
     }
     if (!TAWNY_TS_SOCKET || TAWNY_TS_MODE === 'host') {
       return json(res, 409, { error: 'Only applies to a container running its own tailscaled.' });
+    }
+    // A reset is for an identity that is stuck. On a node that is joined and
+    // running it would be the "move this container to another tailnet" button
+    // /setup/join refuses to be: log out, then join with whatever key came in.
+    if ((await setupStatusCached(0)).tailscale.loggedIn) {
+      return json(res, 409, {
+        error: 'This container is already on a tailnet. Run `tailscale logout` in it if you meant to move it.'
+      });
     }
     const body = await readJsonBody(req);
     let key = String((body && body.authkey) || '').trim();

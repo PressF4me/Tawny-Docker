@@ -109,9 +109,14 @@ services:
       # --- Everything below is optional; defaults are the intended setup ------
       #
       # Hostnames this server answers on. Empty = any. The exposure is DNS
-      # rebinding, and it buys an attacker little here: every route is public or
-      # gated on a pairing ticket, the WebSocket checks Origin, the LAN bridge
-      # only ever dials private space, and there are no cookies.
+      # rebinding, and for the app itself it buys an attacker little: every
+      # route is public or gated on a pairing ticket, the WebSocket checks
+      # Origin, the LAN bridge only ever dials private space, and there are no
+      # cookies. The /setup actions are the exception — they change which
+      # tailnet this container is on — so those never trust an arbitrary name,
+      # whatever this is set to: they answer only by IP address, on a .ts.net
+      # or home-network name, or on a name listed here. If you reach /setup
+      # through your own domain, list that domain here.
       ALLOWED_HOSTS: "${TAWNY_ALLOWED_HOSTS:-}"
       # STUN lets a peer learn its public address when the ends are not on one
       # subnet. STUN_URLS=off for an air-gapped LAN.
