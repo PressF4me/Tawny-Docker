@@ -1,9 +1,9 @@
 {
-  "version": "2.2.11",
+  "version": "2.2.12",
   "notes": [
-    "Support Tawny: one sheet with the cat, the owlet and the dog. Buy a coffee on Ko-fi, or tip in Bitcoin with a new, friendlier QR code",
-    "Tawny now speaks Spanish in the browser, from the welcome screen to the call, when your browser is set to Spanish",
-    "Works better with screen readers and keyboards: changes are read out, and sheets keep focus while they are open"
+    "Security update: the setup page's actions now only work from the setup page itself, on your own network, so another website can no longer change this server's Tailscale or network settings",
+    "A setup page reached through a public reverse proxy no longer treats every visitor as being on your home network",
+    "Built with up-to-date, patched components after a full security review"
   ],
   "changelog": "https://github.com/PressF4me/Tawny-APK/blob/master/docs/changelog/docker.md"
 }
